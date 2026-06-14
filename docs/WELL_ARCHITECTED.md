@@ -1,8 +1,8 @@
-# Strata CFO Resilience Matrix — AWS Well-Architected Self-Assessment
+# Aegis Resilience — AWS Well-Architected Self-Assessment
 
 ## Overview
 
-This document provides a self-assessment of the Strata CFO Resilience Matrix
+This document provides a self-assessment of the Aegis Resilience
 against all 6 pillars of the AWS Well-Architected Framework.
 
 ---
@@ -14,7 +14,7 @@ against all 6 pillars of the AWS Well-Architected Framework.
 | Best Practice | Status | Evidence |
 |--------------|--------|----------|
 | **Design for Operations** | ✓ | Structured logging, X-Ray tracing, CloudWatch metrics for all 6 layers |
-| **Expose Systems Health** | ✓ | CloudWatch dashboard, custom metrics namespace (StrataCFO), 5 alarms configured |
+| **Expose Systems Health** | ✓ | CloudWatch dashboard, custom metrics namespace (AegisCFO), 5 alarms configured |
 | **Define Operations Procedures** | ✓ | Complete runbook in docs/RUNBOOK.md with incident response procedures |
 | **Expect Failure** | ✓ | 6-layer resilience stack with circuit breakers, retry, fallback, cache, degradation, timeout |
 | **Learn from All Operational Events** | ✓ | Chaos engine runs every 6 hours, results in DynamoDB for analysis |
@@ -200,7 +200,7 @@ against all 6 pillars of the AWS Well-Architected Framework.
 | Cost Optimization | ✓ Adequate | 75% |
 | Sustainability | ✓ Adequate | 70% |
 
-**Overall Assessment**: The Strata CFO Resilience Matrix demonstrates strong alignment
+**Overall Assessment**: The Aegis Resilience demonstrates strong alignment
 with the AWS Well-Architected Framework. The 6-layer resilience stack provides
 exceptional reliability, while the FTR-mandated security controls (KMS CMK, least-privilege
 IAM, VPC isolation) ensure robust security. Areas for improvement include enhanced

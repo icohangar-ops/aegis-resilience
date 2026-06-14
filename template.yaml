@@ -1,7 +1,7 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: >
-  Strata CFO Resilience Matrix — AWS-Native FTR Submission
+  Aegis Resilience — AWS-Native FTR Submission
   A 6-layer AI resilience system for CFO operations built on AWS Bedrock,
   Lambda, DynamoDB, S3, OpenSearch Serverless, and EventBridge.
 
@@ -124,7 +124,7 @@ Globals:
     Environment:
       Variables:
         POWERTOOLS_SERVICE_NAME: !Sub "${AWS::StackName}"
-        POWERTOOLS_METRICS_NAMESPACE: StrataCFO
+        POWERTOOLS_METRICS_NAMESPACE: AegisCFO
         LOG_LEVEL: INFO
         ENVIRONMENT: !Ref Environment
         PRIMARY_MODEL_ID: !Ref BedrockModelId
@@ -148,10 +148,10 @@ Resources:
   # KMS CMK — Customer Master Key for encryption at rest
   # FTR Requirement: KMS CMK encryption everywhere (not default AWS keys)
   # =========================================================================
-  StrataKMSKey:
+  AegisKMSKey:
     Type: AWS::KMS::Key
     Properties:
-      Description: !Sub "Strata CFO Resilience Matrix CMK — ${Environment}"
+      Description: !Sub "Aegis Resilience CMK — ${Environment}"
       EnableKeyRotation: true
       KeyPolicy:
         Version: '2012-10-17'
@@ -196,18 +196,18 @@ Resources:
             Resource: "*"
     DeletionPolicy: Retain
 
-  StrataKMSKeyAlias:
+  AegisKMSKeyAlias:
     Type: AWS::KMS::Alias
     Properties:
-      AliasName: !Sub "alias/strata-cfo-${Environment}"
-      TargetKeyId: !Ref StrataKMSKey
-    DependsOn: StrataKMSKey
+      AliasName: !Sub "alias/aegis-${Environment}"
+      TargetKeyId: !Ref AegisKMSKey
+    DependsOn: AegisKMSKey
 
   # =========================================================================
   # VPC — Custom VPC with public + private subnets in 2 AZs
   # FTR Requirement: Custom VPC, private subnets, multi-AZ
   # =========================================================================
-  StrataVPC:
+  AegisVPC:
     Type: AWS::EC2::VPC
     Properties:
       CidrBlock: !Ref VpcCidr
@@ -215,7 +215,7 @@ Resources:
       EnableDnsHostnames: true
       Tags:
         - Key: Name
-          Value: !Sub "strata-vpc-${Environment}"
+          Value: !Sub "aegis-vpc-${Environment}"
         - Key: Compliance
           Value: "FTR-VPC"
 
@@ -224,38 +224,38 @@ Resources:
     Properties:
       Tags:
         - Key: Name
-          Value: !Sub "strata-igw-${Environment}"
+          Value: !Sub "aegis-igw-${Environment}"
 
   VPCGatewayAttachment:
     Type: AWS::EC2::VPCGatewayAttachment
     Properties:
-      VpcId: !Ref StrataVPC
+      VpcId: !Ref AegisVPC
       InternetGatewayId: !Ref InternetGateway
 
   # Public Subnets (2 AZs) — for NAT Gateway
   PublicSubnetA:
     Type: AWS::EC2::Subnet
     Properties:
-      VpcId: !Ref StrataVPC
+      VpcId: !Ref AegisVPC
       AvailabilityZone: !Select [0, !GetAZs '']
       CidrBlock: !Select [0, !Cidr [!Ref VpcCidr, 6, 8]]
       MapPublicIpOnLaunch: true
       Tags:
         - Key: Name
-          Value: !Sub "strata-public-${Environment}-a"
+          Value: !Sub "aegis-public-${Environment}-a"
         - Key: Tier
           Value: Public
 
   PublicSubnetB:
     Type: AWS::EC2::Subnet
     Properties:
-      VpcId: !Ref StrataVPC
+      VpcId: !Ref AegisVPC
       AvailabilityZone: !Select [1, !GetAZs '']
       CidrBlock: !Select [1, !Cidr [!Ref VpcCidr, 6, 8]]
       MapPublicIpOnLaunch: true
       Tags:
         - Key: Name
-          Value: !Sub "strata-public-${Environment}-b"
+          Value: !Sub "aegis-public-${Environment}-b"
         - Key: Tier
           Value: Public
 
@@ -263,26 +263,26 @@ Resources:
   PrivateSubnetA:
     Type: AWS::EC2::Subnet
     Properties:
-      VpcId: !Ref StrataVPC
+      VpcId: !Ref AegisVPC
       AvailabilityZone: !Select [0, !GetAZs '']
       CidrBlock: !Select [2, !Cidr [!Ref VpcCidr, 6, 8]]
       MapPublicIpOnLaunch: false
       Tags:
         - Key: Name
-          Value: !Sub "strata-private-${Environment}-a"
+          Value: !Sub "aegis-private-${Environment}-a"
         - Key: Tier
           Value: Private
 
   PrivateSubnetB:
     Type: AWS::EC2::Subnet
     Properties:
-      VpcId: !Ref StrataVPC
+      VpcId: !Ref AegisVPC
       AvailabilityZone: !Select [1, !GetAZs '']
       CidrBlock: !Select [3, !Cidr [!Ref VpcCidr, 6, 8]]
       MapPublicIpOnLaunch: false
       Tags:
         - Key: Name
-          Value: !Sub "strata-private-${Environment}-b"
+          Value: !Sub "aegis-private-${Environment}-b"
         - Key: Tier
           Value: Private
 
@@ -303,7 +303,7 @@ Resources:
       SubnetId: !Ref PublicSubnetA
       Tags:
         - Key: Name
-          Value: !Sub "strata-nat-${Environment}-a"
+          Value: !Sub "aegis-nat-${Environment}-a"
 
   NatEIPA:
     Type: AWS::EC2::EIP
@@ -311,7 +311,7 @@ Resources:
       Domain: vpc
       Tags:
         - Key: Name
-          Value: !Sub "strata-nat-eip-${Environment}-a"
+          Value: !Sub "aegis-nat-eip-${Environment}-a"
 
   NatGatewayB:
     Type: AWS::EC2::NatGateway
@@ -320,7 +320,7 @@ Resources:
       SubnetId: !Ref PublicSubnetB
       Tags:
         - Key: Name
-          Value: !Sub "strata-nat-${Environment}-b"
+          Value: !Sub "aegis-nat-${Environment}-b"
 
   NatEIPB:
     Type: AWS::EC2::EIP
@@ -328,16 +328,16 @@ Resources:
       Domain: vpc
       Tags:
         - Key: Name
-          Value: !Sub "strata-nat-eip-${Environment}-b"
+          Value: !Sub "aegis-nat-eip-${Environment}-b"
 
   # Private route tables (route to NAT Gateway)
   PrivateRouteTableA:
     Type: AWS::EC2::RouteTable
     Properties:
-      VpcId: !Ref StrataVPC
+      VpcId: !Ref AegisVPC
       Tags:
         - Key: Name
-          Value: !Sub "strata-rt-private-${Environment}-a"
+          Value: !Sub "aegis-rt-private-${Environment}-a"
 
   PrivateRouteA:
     Type: AWS::EC2::Route
@@ -355,10 +355,10 @@ Resources:
   PrivateRouteTableB:
     Type: AWS::EC2::RouteTable
     Properties:
-      VpcId: !Ref StrataVPC
+      VpcId: !Ref AegisVPC
       Tags:
         - Key: Name
-          Value: !Sub "strata-rt-private-${Environment}-b"
+          Value: !Sub "aegis-rt-private-${Environment}-b"
 
   PrivateRouteB:
     Type: AWS::EC2::Route
@@ -377,10 +377,10 @@ Resources:
   PublicRouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
-      VpcId: !Ref StrataVPC
+      VpcId: !Ref AegisVPC
       Tags:
         - Key: Name
-          Value: !Sub "strata-rt-public-${Environment}"
+          Value: !Sub "aegis-rt-public-${Environment}"
 
   PublicRoute:
     Type: AWS::EC2::Route
@@ -406,7 +406,7 @@ Resources:
     Type: AWS::EC2::VPCEndpoint
     Properties:
       ServiceName: !Sub "com.amazonaws.${AWS::Region}.dynamodb"
-      VpcId: !Ref StrataVPC
+      VpcId: !Ref AegisVPC
       PrivateDnsEnabled: false
       SubnetIds:
         - !Ref PrivateSubnetA
@@ -421,7 +421,7 @@ Resources:
     Type: AWS::EC2::VPCEndpoint
     Properties:
       ServiceName: !Sub "com.amazonaws.${AWS::Region}.s3"
-      VpcId: !Ref StrataVPC
+      VpcId: !Ref AegisVPC
       PrivateDnsEnabled: false
       SubnetIds:
         - !Ref PrivateSubnetA
@@ -435,8 +435,8 @@ Resources:
   LambdaSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: "Strata Lambda functions — egress to AWS services only"
-      VpcId: !Ref StrataVPC
+      GroupDescription: "Aegis Lambda functions — egress to AWS services only"
+      VpcId: !Ref AegisVPC
       SecurityGroupEgress:
         # HTTPS to S3 (VPC endpoint covers this, but explicit for clarity)
         - IpProtocol: tcp
@@ -450,7 +450,7 @@ Resources:
           Description: "DynamoDB endpoint access"
       Tags:
         - Key: Name
-          Value: !Sub "strata-lambda-sg-${Environment}"
+          Value: !Sub "aegis-lambda-sg-${Environment}"
 
   # =========================================================================
   # S3 Buckets — KMS CMK encrypted, versioned, with lifecycle
@@ -459,12 +459,12 @@ Resources:
   CuratedDataBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Sub "strata-curated-data-${AWS::AccountId}-${Environment}"
+      BucketName: !Sub "aegis-curated-data-${AWS::AccountId}-${Environment}"
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
               SSEAlgorithm: aws:kms
-              KMSMasterKeyID: !Ref StrataKMSKey
+              KMSMasterKeyID: !Ref AegisKMSKey
       VersioningConfiguration:
         Status: Enabled
       PublicAccessBlockConfiguration:
@@ -481,7 +481,7 @@ Resources:
                 StorageClass: GLACIER
       Tags:
         - Key: Name
-          Value: !Sub "strata-curated-data-${Environment}"
+          Value: !Sub "aegis-curated-data-${Environment}"
         - Key: Compliance
           Value: "FTR-S3-Encrypted"
 
@@ -525,12 +525,12 @@ Resources:
   ModelArtifactsBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Sub "strata-model-artifacts-${AWS::AccountId}-${Environment}"
+      BucketName: !Sub "aegis-model-artifacts-${AWS::AccountId}-${Environment}"
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
               SSEAlgorithm: aws:kms
-              KMSMasterKeyID: !Ref StrataKMSKey
+              KMSMasterKeyID: !Ref AegisKMSKey
       VersioningConfiguration:
         Status: Enabled
       PublicAccessBlockConfiguration:
@@ -545,7 +545,7 @@ Resources:
             NoncurrentVersionExpirationInDays: 30
       Tags:
         - Key: Name
-          Value: !Sub "strata-model-artifacts-${Environment}"
+          Value: !Sub "aegis-model-artifacts-${Environment}"
         - Key: Compliance
           Value: "FTR-S3-Encrypted"
 
@@ -570,12 +570,12 @@ Resources:
   ResilienceLogsBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Sub "strata-resilience-logs-${AWS::AccountId}-${Environment}"
+      BucketName: !Sub "aegis-resilience-logs-${AWS::AccountId}-${Environment}"
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
               SSEAlgorithm: aws:kms
-              KMSMasterKeyID: !Ref StrataKMSKey
+              KMSMasterKeyID: !Ref AegisKMSKey
       VersioningConfiguration:
         Status: Enabled
       PublicAccessBlockConfiguration:
@@ -594,7 +594,7 @@ Resources:
                 StorageClass: GLACIER
       Tags:
         - Key: Name
-          Value: !Sub "strata-resilience-logs-${Environment}"
+          Value: !Sub "aegis-resilience-logs-${Environment}"
         - Key: Compliance
           Value: "FTR-S3-Encrypted"
 
@@ -605,7 +605,7 @@ Resources:
   ResilienceMetricsTable:
     Type: AWS::DynamoDB::Table
     Properties:
-      TableName: !Sub "strata-resilience-metrics-${Environment}"
+      TableName: !Sub "aegis-resilience-metrics-${Environment}"
       AttributeDefinitions:
         - AttributeName: pk
           AttributeType: S
@@ -620,7 +620,7 @@ Resources:
       SSESpecification:
         SSEEnabled: true
         SSEType: KMS
-        KMSMasterKeyId: !Ref StrataKMSKey
+        KMSMasterKeyId: !Ref AegisKMSKey
       TimeToLiveSpecification:
         AttributeName: expires_at
         Enabled: true
@@ -628,14 +628,14 @@ Resources:
         PointInTimeRecoveryEnabled: true
       Tags:
         - Key: Name
-          Value: !Sub "strata-resilience-metrics-${Environment}"
+          Value: !Sub "aegis-resilience-metrics-${Environment}"
         - Key: Compliance
           Value: "FTR-DDB-Encrypted"
 
   CircuitBreakersTable:
     Type: AWS::DynamoDB::Table
     Properties:
-      TableName: !Sub "strata-circuit-breakers-${Environment}"
+      TableName: !Sub "aegis-circuit-breakers-${Environment}"
       AttributeDefinitions:
         - AttributeName: breaker_id
           AttributeType: S
@@ -646,17 +646,17 @@ Resources:
       SSESpecification:
         SSEEnabled: true
         SSEType: KMS
-        KMSMasterKeyId: !Ref StrataKMSKey
+        KMSMasterKeyId: !Ref AegisKMSKey
       PointInTimeRecoverySpecification:
         PointInTimeRecoveryEnabled: true
       Tags:
         - Key: Name
-          Value: !Sub "strata-circuit-breakers-${Environment}"
+          Value: !Sub "aegis-circuit-breakers-${Environment}"
 
   ChaosResultsTable:
     Type: AWS::DynamoDB::Table
     Properties:
-      TableName: !Sub "strata-chaos-results-${Environment}"
+      TableName: !Sub "aegis-chaos-results-${Environment}"
       AttributeDefinitions:
         - AttributeName: test_id
           AttributeType: S
@@ -671,7 +671,7 @@ Resources:
       SSESpecification:
         SSEEnabled: true
         SSEType: KMS
-        KMSMasterKeyId: !Ref StrataKMSKey
+        KMSMasterKeyId: !Ref AegisKMSKey
       TimeToLiveSpecification:
         AttributeName: expires_at
         Enabled: true
@@ -679,12 +679,12 @@ Resources:
         PointInTimeRecoveryEnabled: true
       Tags:
         - Key: Name
-          Value: !Sub "strata-chaos-results-${Environment}"
+          Value: !Sub "aegis-chaos-results-${Environment}"
 
   FineTuningJobsTable:
     Type: AWS::DynamoDB::Table
     Properties:
-      TableName: !Sub "strata-fine-tuning-jobs-${Environment}"
+      TableName: !Sub "aegis-fine-tuning-jobs-${Environment}"
       AttributeDefinitions:
         - AttributeName: job_id
           AttributeType: S
@@ -699,7 +699,7 @@ Resources:
       SSESpecification:
         SSEEnabled: true
         SSEType: KMS
-        KMSMasterKeyId: !Ref StrataKMSKey
+        KMSMasterKeyId: !Ref AegisKMSKey
       TimeToLiveSpecification:
         AttributeName: expires_at
         Enabled: true
@@ -707,7 +707,7 @@ Resources:
         PointInTimeRecoveryEnabled: true
       Tags:
         - Key: Name
-          Value: !Sub "strata-fine-tuning-jobs-${Environment}"
+          Value: !Sub "aegis-fine-tuning-jobs-${Environment}"
 
   # =========================================================================
   # OpenSearch Serverless Collection
@@ -716,24 +716,24 @@ Resources:
   OpenSearchCollection:
     Type: AWS::OpenSearchServerless::Collection
     Properties:
-      CollectionName: !Sub "strata-logs-${Environment}"
+      CollectionName: !Sub "aegis-logs-${Environment}"
       Type: SEARCH
-      Description: "Strata CFO failure log aggregation and pattern search"
+      Description: "Aegis CFO failure log aggregation and pattern search"
       Tags:
         - Key: Project
-          Value: StrataCFO
+          Value: AegisCFO
 
   OpenSearchAccessPolicy:
     Type: AWS::OpenSearchServerless::AccessPolicy
     Properties:
-      Name: !Sub "strata-opensearch-access-${Environment}"
+      Name: !Sub "aegis-opensearch-access-${Environment}"
       Policy: |
         [
           {
             "Rules": [
               {
                 "ResourceType": "collection",
-                "Resource": ["collection/strata-logs-${Environment}"],
+                "Resource": ["collection/aegis-logs-${Environment}"],
                 "Permission": [
                   "aoss:CreateCollectionItems",
                   "aoss:DeleteCollectionItems",
@@ -753,28 +753,28 @@ Resources:
   OpenSearchSecurityPolicy:
     Type: AWS::OpenSearchServerless::SecurityPolicy
     Properties:
-      Name: !Sub "strata-opensearch-encryption-${Environment}"
-      Policy: '{"Rules":[{"ResourceType":"collection","Resource":["collection/strata-logs-'${Environment}'"],"Encryption":{"KmsKeyArn":"'{{resolve:ssm:/strata/kms-key-arn:1}}'"}}]}'
+      Name: !Sub "aegis-opensearch-encryption-${Environment}"
+      Policy: '{"Rules":[{"ResourceType":"collection","Resource":["collection/aegis-logs-'${Environment}'"],"Encryption":{"KmsKeyArn":"'{{resolve:ssm:/aegis/kms-key-arn:1}}'"}}]}'
       Type: encryption
 
   OpenSearchNetworkPolicy:
     Type: AWS::OpenSearchServerless::SecurityPolicy
     Properties:
-      Name: !Sub "strata-opensearch-network-${Environment}"
+      Name: !Sub "aegis-opensearch-network-${Environment}"
       Policy: !Sub |
         [
           {
             "Rules": [
               {
                 "ResourceType": "dashboard",
-                "Resource": ["collection/strata-logs-${Environment}"]
+                "Resource": ["collection/aegis-logs-${Environment}"]
               },
               {
                 "ResourceType": "collection",
-                "Resource": ["collection/strata-logs-${Environment}"]
+                "Resource": ["collection/aegis-logs-${Environment}"]
               }
             ],
-            "SourceVPCEs": ["{{resolve:ssm:/strata/vpc-endpoint-id:1}}"]
+            "SourceVPCEs": ["{{resolve:ssm:/aegis/vpc-endpoint-id:1}}"]
           }
         ]
       Type: network
@@ -786,7 +786,7 @@ Resources:
   BedrockSecret:
     Type: AWS::SecretsManager::Secret
     Properties:
-      Name: !Sub "strata/bedrock-config-${Environment}"
+      Name: !Sub "aegis/bedrock-config-${Environment}"
       Description: "Bedrock model configuration and access parameters"
       SecretString: !Sub |
         {
@@ -798,19 +798,19 @@ Resources:
           "top_p": 0.9,
           "anthropic_version": "bedrock-2023-05-31"
         }
-      KmsKeyId: !Ref StrataKMSKey
+      KmsKeyId: !Ref AegisKMSKey
 
   OpensearchSecret:
     Type: AWS::SecretsManager::Secret
     Properties:
-      Name: !Sub "strata/opensearch-config-${Environment}"
+      Name: !Sub "aegis/opensearch-config-${Environment}"
       Description: "OpenSearch Serverless connection details"
       GenerateSecretString:
         SecretStringTemplate: '{"host": ""}'
         GenerateStringKey: "api_key"
         PasswordLength: 32
         ExcludeCharacters: '"@/\\'
-      KmsKeyId: !Ref StrataKMSKey
+      KmsKeyId: !Ref AegisKMSKey
 
   # =========================================================================
   # SQS Queues — Event-driven resilience triggers
@@ -819,7 +819,7 @@ Resources:
   ResilienceEventsQueue:
     Type: AWS::SQS::Queue
     Properties:
-      QueueName: !Sub "strata-resilience-events-${Environment}"
+      QueueName: !Sub "aegis-resilience-events-${Environment}"
       VisibilityTimeout: 300
       MessageRetentionPeriod: 604800  # 7 days
       RedrivePolicy:
@@ -828,19 +828,19 @@ Resources:
       SqsManagedSseEnabled: true  # FTR: SSE-SQS for encryption at rest
       Tags:
         - Key: Name
-          Value: !Sub "strata-resilience-events-${Environment}"
+          Value: !Sub "aegis-resilience-events-${Environment}"
 
   ResilienceEventsDLQ:
     Type: AWS::SQS::Queue
     Properties:
-      QueueName: !Sub "strata-resilience-events-dlq-${Environment}"
+      QueueName: !Sub "aegis-resilience-events-dlq-${Environment}"
       MessageRetentionPeriod: 1209600  # 14 days
       SqsManagedSseEnabled: true
 
   ChaosTasksQueue:
     Type: AWS::SQS::Queue
     Properties:
-      QueueName: !Sub "strata-chaos-tasks-${Environment}"
+      QueueName: !Sub "aegis-chaos-tasks-${Environment}"
       VisibilityTimeout: 600
       MessageRetentionPeriod: 604800
       RedrivePolicy:
@@ -849,12 +849,12 @@ Resources:
       SqsManagedSseEnabled: true
       Tags:
         - Key: Name
-          Value: !Sub "strata-chaos-tasks-${Environment}"
+          Value: !Sub "aegis-chaos-tasks-${Environment}"
 
   ChaosTasksDLQ:
     Type: AWS::SQS::Queue
     Properties:
-      QueueName: !Sub "strata-chaos-tasks-dlq-${Environment}"
+      QueueName: !Sub "aegis-chaos-tasks-dlq-${Environment}"
       MessageRetentionPeriod: 1209600
       SqsManagedSseEnabled: true
 
@@ -864,7 +864,7 @@ Resources:
   PowertoolsLayer:
     Type: AWS::Serverless::LayerVersion
     Properties:
-      LayerName: !Sub "strata-powertools-${Environment}"
+      LayerName: !Sub "aegis-powertools-${Environment}"
       Description: "AWS Lambda Powertools for Python (structured logging, tracing, metrics)"
       ContentUri: lambda/layers
       CompatibleRuntimes:
@@ -880,7 +880,7 @@ Resources:
   CurateFunctionRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub "strata-curate-role-${Environment}"
+      RoleName: !Sub "aegis-curate-role-${Environment}"
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -927,7 +927,7 @@ Resources:
                   - kms:Decrypt
                   - kms:Encrypt
                   - kms:GenerateDataKey
-                Resource: !GetAtt StrataKMSKey.Arn
+                Resource: !GetAtt AegisKMSKey.Arn
         # FTR: Specific Secrets Manager secret
         - PolicyName: SecretsAccess
           PolicyDocument:
@@ -952,13 +952,13 @@ Resources:
                 Resource: "*"
                 Condition:
                   StringEquals:
-                    aws:ResourceTag/Project: StrataCFO
+                    aws:ResourceTag/Project: AegisCFO
 
   # --- Fine-Tune Function Role ---
   FineTuneFunctionRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub "strata-finetune-role-${Environment}"
+      RoleName: !Sub "aegis-finetune-role-${Environment}"
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -1020,7 +1020,7 @@ Resources:
                   - kms:Decrypt
                   - kms:Encrypt
                   - kms:GenerateDataKey
-                Resource: !GetAtt StrataKMSKey.Arn
+                Resource: !GetAtt AegisKMSKey.Arn
         - PolicyName: SecretsAccess
           PolicyDocument:
             Version: '2012-10-17'
@@ -1034,7 +1034,7 @@ Resources:
   GatewayFunctionRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub "strata-gateway-role-${Environment}"
+      RoleName: !Sub "aegis-gateway-role-${Environment}"
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -1098,7 +1098,7 @@ Resources:
                   - kms:Decrypt
                   - kms:Encrypt
                   - kms:GenerateDataKey
-                Resource: !GetAtt StrataKMSKey.Arn
+                Resource: !GetAtt AegisKMSKey.Arn
         - PolicyName: SecretsAccess
           PolicyDocument:
             Version: '2012-10-17'
@@ -1112,7 +1112,7 @@ Resources:
   ResilienceStackFunctionRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub "strata-resilience-role-${Environment}"
+      RoleName: !Sub "aegis-resilience-role-${Environment}"
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -1166,7 +1166,7 @@ Resources:
                   - kms:Decrypt
                   - kms:Encrypt
                   - kms:GenerateDataKey
-                Resource: !GetAtt StrataKMSKey.Arn
+                Resource: !GetAtt AegisKMSKey.Arn
         - PolicyName: SecretsAccess
           PolicyDocument:
             Version: '2012-10-17'
@@ -1180,7 +1180,7 @@ Resources:
   ChaosFunctionRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub "strata-chaos-role-${Environment}"
+      RoleName: !Sub "aegis-chaos-role-${Environment}"
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -1238,13 +1238,13 @@ Resources:
               - Effect: Allow
                 Action:
                   - kms:Decrypt
-                Resource: !GetAtt StrataKMSKey.Arn
+                Resource: !GetAtt AegisKMSKey.Arn
 
   # --- CFO Agents Function Role ---
   AgentsFunctionRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub "strata-agents-role-${Environment}"
+      RoleName: !Sub "aegis-agents-role-${Environment}"
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -1306,7 +1306,7 @@ Resources:
                   - kms:Decrypt
                   - kms:Encrypt
                   - kms:GenerateDataKey
-                Resource: !GetAtt StrataKMSKey.Arn
+                Resource: !GetAtt AegisKMSKey.Arn
         - PolicyName: SQSAccess
           PolicyDocument:
             Version: '2012-10-17'
@@ -1320,7 +1320,7 @@ Resources:
   LambdaBasicExecutionPolicy:
     Type: AWS::IAM::ManagedPolicy
     Properties:
-      ManagedPolicyName: !Sub "strata-lambda-basic-${Environment}"
+      ManagedPolicyName: !Sub "aegis-lambda-basic-${Environment}"
       PolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -1328,7 +1328,7 @@ Resources:
             Action:
               - logs:CreateLogStream
               - logs:PutLogEvents
-            Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/strata-*"
+            Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/aegis-*"
           - Effect: Allow
             Action:
               - ec2:CreateNetworkInterface
@@ -1337,7 +1337,7 @@ Resources:
             Resource: "*"
             Condition:
               StringEquals:
-                aws:ResourceTag/Project: StrataCFO
+                aws:ResourceTag/Project: AegisCFO
           - Effect: Allow
             Action:
               - xray:PutTraceSegments
@@ -1352,7 +1352,7 @@ Resources:
   CurateFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub "strata-curate-${Environment}"
+      FunctionName: !Sub "aegis-curate-${Environment}"
       CodeUri: lambda/curate
       Handler: app.lambda_handler
       Role: !GetAtt CurateFunctionRole.Arn
@@ -1364,7 +1364,7 @@ Resources:
           RESILIENCE_LOGS_BUCKET: !Ref ResilienceLogsBucket
           METRICS_TABLE: !Ref ResilienceMetricsTable
           OPENSEARCH_SECRET_ARN: !Ref OpensearchSecret
-          KMS_KEY_ID: !Ref StrataKMSKey
+          KMS_KEY_ID: !Ref AegisKMSKey
       Events:
         ScheduledCuration:
           Type: Schedule
@@ -1377,7 +1377,7 @@ Resources:
   FineTuneFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub "strata-finetune-${Environment}"
+      FunctionName: !Sub "aegis-finetune-${Environment}"
       CodeUri: lambda/fine_tune
       Handler: app.lambda_handler
       Role: !GetAtt FineTuneFunctionRole.Arn
@@ -1389,7 +1389,7 @@ Resources:
           MODEL_ARTIFACTS_BUCKET: !Ref ModelArtifactsBucket
           FINE_TUNING_TABLE: !Ref FineTuningJobsTable
           BEDROCK_SECRET_ARN: !Ref BedrockSecret
-          KMS_KEY_ID: !Ref StrataKMSKey
+          KMS_KEY_ID: !Ref AegisKMSKey
       Events:
         SQSTrigger:
           Type: SQS
@@ -1401,7 +1401,7 @@ Resources:
   GatewayFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub "strata-gateway-${Environment}"
+      FunctionName: !Sub "aegis-gateway-${Environment}"
       CodeUri: lambda/gateway
       Handler: app.lambda_handler
       Role: !GetAtt GatewayFunctionRole.Arn
@@ -1414,13 +1414,13 @@ Resources:
           METRICS_TABLE: !Ref ResilienceMetricsTable
           CACHE_BUCKET: !Ref CuratedDataBucket
           BEDROCK_SECRET_ARN: !Ref BedrockSecret
-          KMS_KEY_ID: !Ref StrataKMSKey
+          KMS_KEY_ID: !Ref AegisKMSKey
 
   # --- Layer 4: Resilience Stack ---
   ResilienceStackFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub "strata-resilience-${Environment}"
+      FunctionName: !Sub "aegis-resilience-${Environment}"
       CodeUri: lambda/resilience_stack
       Handler: app.lambda_handler
       Role: !GetAtt ResilienceStackFunctionRole.Arn
@@ -1432,13 +1432,13 @@ Resources:
           METRICS_TABLE: !Ref ResilienceMetricsTable
           CACHE_BUCKET: !Ref CuratedDataBucket
           BEDROCK_SECRET_ARN: !Ref BedrockSecret
-          KMS_KEY_ID: !Ref StrataKMSKey
+          KMS_KEY_ID: !Ref AegisKMSKey
 
   # --- Layer 5: Chaos Engine ---
   ChaosFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub "strata-chaos-${Environment}"
+      FunctionName: !Sub "aegis-chaos-${Environment}"
       CodeUri: lambda/chaos
       Handler: app.lambda_handler
       Role: !GetAtt ChaosFunctionRole.Arn
@@ -1449,7 +1449,7 @@ Resources:
           CHAOS_RESULTS_TABLE: !Ref ChaosResultsTable
           METRICS_TABLE: !Ref ResilienceMetricsTable
           CHAOS_QUEUE_URL: !Ref ChaosTasksQueue
-          KMS_KEY_ID: !Ref StrataKMSKey
+          KMS_KEY_ID: !Ref AegisKMSKey
       Events:
         ChaosSchedule:
           Type: ScheduleV2
@@ -1464,13 +1464,13 @@ Resources:
           Properties:
             Path: /chaos/trigger
             Method: post
-            RestApiId: !Ref StrataApiGateway
+            RestApiId: !Ref AegisApiGateway
 
   # --- Layer 6: CFO Agents ---
   AgentsFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub "strata-agents-${Environment}"
+      FunctionName: !Sub "aegis-agents-${Environment}"
       CodeUri: lambda/agents
       Handler: app.lambda_handler
       Role: !GetAtt AgentsFunctionRole.Arn
@@ -1482,17 +1482,17 @@ Resources:
           CURATED_DATA_BUCKET: !Ref CuratedDataBucket
           BEDROCK_SECRET_ARN: !Ref BedrockSecret
           RESILIENCE_EVENTS_QUEUE: !Ref ResilienceEventsQueue
-          KMS_KEY_ID: !Ref StrataKMSKey
+          KMS_KEY_ID: !Ref AegisKMSKey
 
   # =========================================================================
   # API Gateway — REST API with Cognito Authorizer
   # FTR Requirement: API Gateway with authentication, multi-tenant ABAC
   # =========================================================================
-  StrataApiGateway:
+  AegisApiGateway:
     Type: AWS::Serverless::Api
     Properties:
       StageName: !Ref Environment
-      Description: "Strata CFO Resilience Matrix — REST API Gateway"
+      Description: "Aegis Resilience — REST API Gateway"
       CorsConfiguration:
         AllowMethods:
           - GET
@@ -1509,7 +1509,7 @@ Resources:
         AllowOrigins:
           - "*"
       Auth:
-        DefaultAuthorizer: StrataCognitoAuthorizer
+        DefaultAuthorizer: AegisCognitoAuthorizer
         AddDefaultAuthorizerToCorsPreflight: false
       AccessLogSetting:
         DestinationArn: !GetAtt ApiAccessLogGroup.Arn
@@ -1526,24 +1526,24 @@ Resources:
            "responseLength":"$context.responseLength",
            "tenantId":"$context.authorizer.tenant_id"}
 
-  StrataCognitoAuthorizer:
+  AegisCognitoAuthorizer:
     Type: AWS::ApiGateway::Authorizer
     Properties:
-      Name: !Sub "strata-cognito-authorizer-${Environment}"
+      Name: !Sub "aegis-cognito-authorizer-${Environment}"
       Type: COGNITO_USER_POOLS
       IdentitySource: method.request.header.Authorization
       ProviderARNs:
-        - !GetAtt StrataUserPool.Arn
-      RestApiId: !Ref StrataApiGateway.Stage
+        - !GetAtt AegisUserPool.Arn
+      RestApiId: !Ref AegisApiGateway.Stage
 
   # =========================================================================
   # Amazon Cognito — Multi-tenant identity (ABAC)
   # FTR Requirement: Authentication service, tenant isolation
   # =========================================================================
-  StrataUserPool:
+  AegisUserPool:
     Type: AWS::Cognito::UserPool
     Properties:
-      UserPoolName: !Sub "strata-users-${Environment}"
+      UserPoolName: !Sub "aegis-users-${Environment}"
       Policies:
         PasswordPolicy:
           MinimumLength: 12
@@ -1580,11 +1580,11 @@ Resources:
           - Name: verified_phone_number
             Priority: 2
 
-  StrataUserPoolClient:
+  AegisUserPoolClient:
     Type: AWS::Cognito::UserPoolClient
     Properties:
-      ClientName: !Sub "strata-web-client-${Environment}"
-      UserPoolId: !Ref StrataUserPool
+      ClientName: !Sub "aegis-web-client-${Environment}"
+      UserPoolId: !Ref AegisUserPool
       ExplicitAuthFlows:
         - ALLOW_ADMIN_SRP_AUTH
         - ALLOW_USER_SRP_AUTH
@@ -1604,7 +1604,7 @@ Resources:
   CognitoPreTokenFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub "strata-cognito-pretoken-${Environment}"
+      FunctionName: !Sub "aegis-cognito-pretoken-${Environment}"
       CodeUri: lambda/layers
       Handler: cognito_handler.lambda_handler
       Timeout: 30
@@ -1617,7 +1617,7 @@ Resources:
       FunctionName: !Ref CognitoPreTokenFunction
       Action: lambda:InvokeFunction
       Principal: cognito-idp.amazonaws.com
-      SourceArn: !GetAtt StrataUserPool.Arn
+      SourceArn: !GetAtt AegisUserPool.Arn
 
   # =========================================================================
   # EventBridge Rules — Chaos scheduling + resilience triggers
@@ -1626,7 +1626,7 @@ Resources:
   ChaosScheduleRule:
     Type: AWS::Events::Rule
     Properties:
-      Name: !Sub "strata-chaos-schedule-${Environment}"
+      Name: !Sub "aegis-chaos-schedule-${Environment}"
       Description: "Scheduled trigger for chaos engine testing"
       ScheduleExpression: !Ref ChaosSchedule
       State: ENABLED
@@ -1643,11 +1643,11 @@ Resources:
   ResilienceTriggerRule:
     Type: AWS::Events::Rule
     Properties:
-      Name: !Sub "strata-resilience-trigger-${Environment}"
+      Name: !Sub "aegis-resilience-trigger-${Environment}"
       Description: "EventBridge rule for resilience event triggers"
       EventPattern:
         source:
-          - strata.resilience
+          - aegis.resilience
         detail-type:
           - ResilienceEvent
       State: ENABLED
@@ -1658,7 +1658,7 @@ Resources:
   CircuitBreakerAlarmRule:
     Type: AWS::Events::Rule
     Properties:
-      Name: !Sub "strata-cb-alarm-rule-${Environment}"
+      Name: !Sub "aegis-cb-alarm-rule-${Environment}"
       Description: "Trigger resilience stack when circuit breaker alarm fires"
       EventPattern:
         source:
@@ -1743,7 +1743,7 @@ Resources:
   ApiAccessLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Sub "/strata/api-gateway-access-${Environment}"
+      LogGroupName: !Sub "/aegis/api-gateway-access-${Environment}"
       RetentionInDays: 90
       Tags:
         - Key: Compliance
@@ -1758,7 +1758,7 @@ Resources:
   GatewayErrorAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: !Sub "strata-gateway-errors-${Environment}"
+      AlarmName: !Sub "aegis-gateway-errors-${Environment}"
       AlarmDescription: "Alert when gateway function error rate exceeds 5% in 5 minutes"
       Namespace: AWS/Lambda
       MetricName: Errors
@@ -1772,13 +1772,13 @@ Resources:
       ComparisonOperator: GreaterThanThreshold
       TreatMissingData: notBreaching
       AlarmActions:
-        - !Ref StrataAlertSNSTopic
+        - !Ref AegisAlertSNSTopic
 
   # Alarm: Gateway function latency exceeds 5 seconds (P99)
   GatewayLatencyAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: !Sub "strata-gateway-latency-${Environment}"
+      AlarmName: !Sub "aegis-gateway-latency-${Environment}"
       AlarmDescription: "Alert when gateway function P99 latency exceeds 5 seconds"
       Namespace: AWS/Lambda
       MetricName: Duration
@@ -1792,15 +1792,15 @@ Resources:
       ComparisonOperator: GreaterThanThreshold
       TreatMissingData: notBreaching
       AlarmActions:
-        - !Ref StrataAlertSNSTopic
+        - !Ref AegisAlertSNSTopic
 
   # Alarm: Circuit breaker state = OPEN (custom metric from Lambda)
   CircuitBreakerAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: !Sub "strata-circuit-breaker-open-${Environment}"
+      AlarmName: !Sub "aegis-circuit-breaker-open-${Environment}"
       AlarmDescription: "Alert when any circuit breaker transitions to OPEN state"
-      Namespace: StrataCFO
+      Namespace: AegisCFO
       MetricName: CircuitBreakerState
       Dimensions:
         - Name: Environment
@@ -1812,15 +1812,15 @@ Resources:
       ComparisonOperator: GreaterThanOrEqualToThreshold
       TreatMissingData: notBreaching
       AlarmActions:
-        - !Ref StrataAlertSNSTopic
+        - !Ref AegisAlertSNSTopic
 
   # Alarm: Chaos test failure rate exceeds 10%
   ChaosFailureAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: !Sub "strata-chaos-failure-${Environment}"
+      AlarmName: !Sub "aegis-chaos-failure-${Environment}"
       AlarmDescription: "Alert when chaos test failure rate exceeds 10%"
-      Namespace: StrataCFO
+      Namespace: AegisCFO
       MetricName: ChaosTestFailureRate
       Dimensions:
         - Name: Environment
@@ -1832,15 +1832,15 @@ Resources:
       ComparisonOperator: GreaterThanThreshold
       TreatMissingData: notBreaching
       AlarmActions:
-        - !Ref StrataAlertSNSTopic
+        - !Ref AegisAlertSNSTopic
 
   # Alarm: Resilience throughput drop (custom metric)
   ResilienceThroughputAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: !Sub "strata-resilience-throughput-${Environment}"
+      AlarmName: !Sub "aegis-resilience-throughput-${Environment}"
       AlarmDescription: "Alert when resilience stack throughput drops below threshold"
-      Namespace: StrataCFO
+      Namespace: AegisCFO
       MetricName: ResilienceStackInvocations
       Dimensions:
         - Name: Environment
@@ -1852,21 +1852,21 @@ Resources:
       ComparisonOperator: LessThanThreshold
       TreatMissingData: breaching
       AlarmActions:
-        - !Ref StrataAlertSNSTopic
+        - !Ref AegisAlertSNSTopic
 
   # SNS Topic for alarm notifications
-  StrataAlertSNSTopic:
+  AegisAlertSNSTopic:
     Type: AWS::SNS::Topic
     Properties:
-      TopicName: !Sub "strata-alerts-${Environment}"
+      TopicName: !Sub "aegis-alerts-${Environment}"
       Tags:
         - Key: Name
-          Value: !Sub "strata-alerts-${Environment}"
+          Value: !Sub "aegis-alerts-${Environment}"
 
-  StrataAlertSNSTopicPolicy:
+  AegisAlertSNSTopicPolicy:
     Type: AWS::SNS::TopicPolicy
     Properties:
-      TopicArn: !Ref StrataAlertSNSTopic
+      TopicArn: !Ref AegisAlertSNSTopic
       PolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -1875,29 +1875,29 @@ Resources:
             Principal:
               Service: cloudwatch.amazonaws.com
             Action: sns:Publish
-            Resource: !Ref StrataAlertSNSTopic
+            Resource: !Ref AegisAlertSNSTopic
 
   # =========================================================================
   # CloudTrail — API call auditing
   # FTR Requirement: VPC Flow Logs + CloudTrail
   # =========================================================================
-  StrataCloudTrail:
+  AegisCloudTrail:
     Type: AWS::CloudTrail::Trail
-    DependsOn: StrataCloudTrailLogGroup
+    DependsOn: AegisCloudTrailLogGroup
     Properties:
-      TrailName: !Sub "strata-cloudtrail-${Environment}"
+      TrailName: !Sub "aegis-cloudtrail-${Environment}"
       S3BucketName: !Ref CloudTrailBucket
-      S3KeyPrefix: "cloudtrail/strata"
+      S3KeyPrefix: "cloudtrail/aegis"
       IsLogging: true
       IncludeGlobalServiceEvents: false
       IsMultiRegionTrail: false
       EnableLogFileValidation: true
-      CloudWatchLogsLogGroupArn: !GetAtt StrataCloudTrailLogGroup.Arn
+      CloudWatchLogsLogGroupArn: !GetAtt AegisCloudTrailLogGroup.Arn
       CloudWatchLogsRoleArn: !GetAtt CloudTrailLogsRole.Arn
-      KMSKeyId: !Ref StrataKMSKey
+      KMSKeyId: !Ref AegisKMSKey
       Tags:
         - Key: Name
-          Value: !Sub "strata-cloudtrail-${Environment}"
+          Value: !Sub "aegis-cloudtrail-${Environment}"
         - Key: Compliance
           Value: "FTR-CloudTrail"
 
@@ -1914,21 +1914,21 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSCloudTrailServiceRole
 
-  StrataCloudTrailLogGroup:
+  AegisCloudTrailLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Sub "/aws/cloudtrail/strata-${Environment}"
+      LogGroupName: !Sub "/aws/cloudtrail/aegis-${Environment}"
       RetentionInDays: 90
 
   CloudTrailBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Sub "strata-cloudtrail-${AWS::AccountId}-${Environment}"
+      BucketName: !Sub "aegis-cloudtrail-${AWS::AccountId}-${Environment}"
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
               SSEAlgorithm: aws:kms
-              KMSMasterKeyID: !Ref StrataKMSKey
+              KMSMasterKeyID: !Ref AegisKMSKey
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
         BlockPublicPolicy: true
@@ -1953,7 +1953,7 @@ Resources:
             Principal:
               Service: cloudtrail.amazonaws.com
             Action: s3:PutObject
-            Resource: !Sub "${CloudTrailBucket.Arn}/cloudtrail/strata/AWSLogs/${AWS::AccountId}/*"
+            Resource: !Sub "${CloudTrailBucket.Arn}/cloudtrail/aegis/AWSLogs/${AWS::AccountId}/*"
             Condition:
               StringEquals:
                 s3:x-amz-acl: bucket-owner-full-control
@@ -1975,21 +1975,21 @@ Resources:
   VPCFlowLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Sub "/strata/vpc-flow-logs-${Environment}"
+      LogGroupName: !Sub "/aegis/vpc-flow-logs-${Environment}"
       RetentionInDays: 30
 
   VPCFlowLog:
     Type: AWS::EC2::FlowLog
     Properties:
       ResourceType: VPC
-      ResourceId: !Ref StrataVPC
+      ResourceId: !Ref AegisVPC
       TrafficType: ALL
       LogGroupName: !Ref VPCFlowLogGroup
       DeliverLogsPermissionArn: !GetAtt VPCFlowLogRole.Arn
       LogDestinationType: cloud-watch-logs
       Tags:
         - Key: Name
-          Value: !Sub "strata-vpc-flow-log-${Environment}"
+          Value: !Sub "aegis-vpc-flow-log-${Environment}"
         - Key: Compliance
           Value: "FTR-VPCFlowLogs"
 
@@ -1999,7 +1999,7 @@ Resources:
 Outputs:
   ApiEndpoint:
     Description: "API Gateway endpoint URL"
-    Value: !Sub "https://${StrataApiGateway}.execute-api.${AWS::Region}.amazonaws.com/${Environment}"
+    Value: !Sub "https://${AegisApiGateway}.execute-api.${AWS::Region}.amazonaws.com/${Environment}"
     Export:
       Name: !Sub "${AWS::StackName}-ApiEndpoint"
 
@@ -2047,25 +2047,25 @@ Outputs:
 
   UserPoolId:
     Description: "Cognito User Pool ID for authentication"
-    Value: !Ref StrataUserPool
+    Value: !Ref AegisUserPool
     Export:
       Name: !Sub "${AWS::StackName}-UserPoolId"
 
   UserPoolClientId:
     Description: "Cognito User Pool Client ID"
-    Value: !Ref StrataUserPoolClient
+    Value: !Ref AegisUserPoolClient
     Export:
       Name: !Sub "${AWS::StackName}-UserPoolClientId"
 
   VPCId:
     Description: "Custom VPC ID"
-    Value: !Ref StrataVPC
+    Value: !Ref AegisVPC
     Export:
       Name: !Sub "${AWS::StackName}-VPCId"
 
   KMSKeyId:
     Description: "KMS CMK ARN for encryption"
-    Value: !GetAtt StrataKMSKey.Arn
+    Value: !GetAtt AegisKMSKey.Arn
     Export:
       Name: !Sub "${AWS::StackName}-KMSKeyId"
 
@@ -2081,8 +2081,8 @@ Outputs:
     Export:
       Name: !Sub "${AWS::StackName}-ChaosTasksQueue"
 
-  StrataAlertSNSTopicArn:
+  AegisAlertSNSTopicArn:
     Description: "SNS topic ARN for operational alerts"
-    Value: !Ref StrataAlertSNSTopic
+    Value: !Ref AegisAlertSNSTopic
     Export:
       Name: !Sub "${AWS::StackName}-AlertSNSTopic"

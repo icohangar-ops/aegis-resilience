@@ -1,5 +1,5 @@
 """
-Strata CFO Resilience Matrix — Shared Bedrock Client Library
+Aegis Resilience — Shared Bedrock Client Library
 
 This module provides a production-grade wrapper around boto3 Bedrock Runtime
 with multi-model support, guardrails integration, token counting, and

@@ -1,8 +1,8 @@
-# Strata CFO Resilience Matrix — CHP State Machine
+# Aegis Resilience — CHP State Machine
 
 ## Overview
 
-The Change Health Process (CHP) governs all modifications to the Strata CFO Resilience Matrix
+The Change Health Process (CHP) governs all modifications to the Aegis Resilience
 codebase and infrastructure. This ensures FTR (Foundational Technical Review) compliance is
 maintained across every change.
 

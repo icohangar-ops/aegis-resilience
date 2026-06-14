@@ -1,8 +1,8 @@
-# Strata CFO Resilience Matrix — Architecture Documentation
+# Aegis Resilience — Architecture Documentation
 
 ## System Overview
 
-Strata is a 6-layer AI resilience system designed for CFO operations, built entirely
+Aegis is a 6-layer AI resilience system designed for CFO operations, built entirely
 on AWS-native services. It ensures that LLM-powered financial analysis agents remain
 available, responsive, and accurate even during provider outages, latency spikes,
 and partial service degradation.
@@ -11,7 +11,7 @@ and partial service degradation.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                         STRATA CFO RESILIENCE MATRIX                         │
+│                         AEGIS CFO RESILIENCE MATRIX                         │
 │                    (AWS Partner Network — FTR Submission)                    │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │

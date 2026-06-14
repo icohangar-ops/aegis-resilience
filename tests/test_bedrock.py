@@ -1,5 +1,5 @@
 """
-Strata CFO Resilience Matrix — Bedrock Client Tests
+Aegis Resilience — Bedrock Client Tests
 
 Tests for the shared Bedrock client library with mocked AWS services.
 

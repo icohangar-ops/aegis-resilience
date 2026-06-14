@@ -1,5 +1,5 @@
 """
-Strata CFO Resilience Matrix — Resilience Layer Tests
+Aegis Resilience — Resilience Layer Tests
 
 Tests for the 6-layer resilience stack:
 - Layer 1: Retry with exponential backoff

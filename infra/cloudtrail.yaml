@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
-  Strata CloudTrail Configuration — Nested Stack
+  Aegis CloudTrail Configuration — Nested Stack
   Configures AWS CloudTrail for API call auditing.
 
   FTR Requirement: CloudTrail must be enabled for all control plane API calls.
@@ -17,7 +17,7 @@ Parameters:
     Description: Environment name for resource tagging
   TrailName:
     Type: String
-    Default: strata-cloudtrail
+    Default: aegis-cloudtrail
     Description: CloudTrail trail name
   S3BucketName:
     Type: String
@@ -47,7 +47,7 @@ Resources:
     Type: AWS::KMS::Key
     Condition: CreateKMSKey
     Properties:
-      Description: !Sub "Strata CloudTrail KMS Key — ${Environment}"
+      Description: !Sub "Aegis CloudTrail KMS Key — ${Environment}"
       EnableKeyRotation: true
       KeyPolicy:
         Version: '2012-10-17'
@@ -77,7 +77,7 @@ Resources:
     Type: AWS::S3::Bucket
     Condition: CreateBucket
     Properties:
-      BucketName: !Sub "strata-cloudtrail-${AWS::AccountId}-${Environment}-${AWS::Region}"
+      BucketName: !Sub "aegis-cloudtrail-${AWS::AccountId}-${Environment}-${AWS::Region}"
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
@@ -118,7 +118,7 @@ Resources:
   CloudTrailLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Sub "/aws/cloudtrail/strata-${Environment}"
+      LogGroupName: !Sub "/aws/cloudtrail/aegis-${Environment}"
       RetentionInDays: 90
 
   CloudTrailLogsRole:
@@ -134,7 +134,7 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSCloudTrailServiceRole
 
-  StrataTrail:
+  AegisTrail:
     Type: AWS::CloudTrail::Trail
     DependsOn:
       - CloudTrailBucketPolicy
@@ -142,7 +142,7 @@ Resources:
     Properties:
       TrailName: !Sub "${TrailName}-${Environment}"
       S3BucketName: !If [CreateBucket, !Ref CloudTrailBucket, !Ref S3BucketName]
-      S3KeyPrefix: "cloudtrail/strata/"
+      S3KeyPrefix: "cloudtrail/aegis/"
       IsLogging: true
       IncludeGlobalServiceEvents: false
       IsMultiRegionTrail: !Equals [!Ref IsMultiRegion, "true"]
@@ -165,7 +165,7 @@ Conditions:
 Outputs:
   TrailArn:
     Description: CloudTrail ARN
-    Value: !Ref StrataTrail
+    Value: !Ref AegisTrail
   TrailName:
     Description: CloudTrail trail name
     Value: !Sub "${TrailName}-${Environment}"

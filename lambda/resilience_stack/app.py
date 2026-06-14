@@ -1,5 +1,5 @@
 """
-Strata CFO Resilience Matrix — Layer 4: 6-Layer Resilience Stack Lambda
+Aegis Resilience — Layer 4: 6-Layer Resilience Stack Lambda
 
 This Lambda function implements the core 6-layer resilience stack that wraps
 every LLM request with comprehensive protection mechanisms.
@@ -58,8 +58,8 @@ RESILIENCE_TIMEOUT_MS = 30000
 # Model fallback chain
 MODEL_CHAIN = [PRIMARY_MODEL_ID, FALLBACK_MODEL_ID, TERTIARY_MODEL_ID]
 
-logger = Logger(service="strata-resilience")
-metrics = Metrics(namespace="StrataCFO")
+logger = Logger(service="aegis-resilience")
+metrics = Metrics(namespace="AegisCFO")
 tracer = Tracer()
 
 _bedrock_runtime = None

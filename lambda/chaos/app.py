@@ -1,5 +1,5 @@
 """
-Strata CFO Resilience Matrix — Layer 5: Chaos Engine Lambda
+Aegis Resilience — Layer 5: Chaos Engine Lambda
 
 This Lambda function implements the Chaos Engine layer that proactively tests
 the resilience stack by simulating failures and verifying recovery mechanisms.
@@ -46,8 +46,8 @@ METRICS_TABLE = os.environ.get("METRICS_TABLE", "")
 CHAOS_QUEUE_URL = os.environ.get("CHAOS_QUEUE_URL", "")
 KMS_KEY_ID = os.environ.get("KMS_KEY_ID", "")
 
-logger = Logger(service="strata-chaos")
-metrics = Metrics(namespace="StrataCFO")
+logger = Logger(service="aegis-chaos")
+metrics = Metrics(namespace="AegisCFO")
 tracer = Tracer()
 
 _dynamodb_resource = None

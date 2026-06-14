@@ -1,5 +1,5 @@
 """
-Strata CFO Resilience Matrix — Cross-Cutting Concerns Lambda Layer
+Aegis Resilience — Cross-Cutting Concerns Lambda Layer
 
 This module provides shared utilities used across all Lambda functions:
 - Structured logging (JSON format for CloudWatch Insights)
@@ -11,7 +11,7 @@ Packaged as a Lambda Layer for code reuse across all 6 function layers.
 
 FTR Compliance Notes:
 - All logging is structured JSON for CloudWatch Insights querying
-- Custom metrics use the StrataCFO namespace for dashboard consistency
+- Custom metrics use the AegisCFO namespace for dashboard consistency
 - X-Ray subsegments provide per-layer trace visibility
 - Error classification enables automated remediation
 """
@@ -211,12 +211,12 @@ class MetricsEmitter:
     CloudWatch custom metrics emitter.
 
     FTR Compliance:
-    - All metrics use the StrataCFO namespace
+    - All metrics use the AegisCFO namespace
     - Dimensions are consistent for dashboard aggregation
     - Metric units are properly typed for graph scaling
     """
 
-    def __init__(self, namespace: str = "StrataCFO", region: str = None):
+    def __init__(self, namespace: str = "AegisCFO", region: str = None):
         self.namespace = namespace
         self._region = region or os.environ.get("AWS_REGION", "us-east-1")
         self._client = None
@@ -308,7 +308,7 @@ class TraceHelper:
             from aws_xray_sdk import global_sdk_context
             segment = global_sdk_context.get_local().get_segment()
             if segment:
-                segment.put_metadata(key, value, "strata")
+                segment.put_metadata(key, value, "aegis")
         except ImportError:
             pass
         except Exception:

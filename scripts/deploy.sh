@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================================
-# Strata CFO Resilience Matrix — Deployment Script
+# Aegis Resilience — Deployment Script
 # ============================================================================
 # Deploys the full 6-layer AI resilience system to AWS using SAM CLI.
 #
@@ -31,7 +31,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 ENVIRONMENT="${1:-production}"
-STACK_NAME="strata-cfo-${ENVIRONMENT}"
+STACK_NAME="aegis-${ENVIRONMENT}"
 REGION="${AWS_REGION:-us-east-1}"
 SAM_CONFIG="${PROJECT_DIR}/samconfig.toml"
 
@@ -168,7 +168,7 @@ deploy_stack() {
             "Environment=${ENVIRONMENT}" \
             "ChaosSchedule=${CHAOS_SCHEDULE}" \
         --tags \
-            Project=StrataCFO \
+            Project=AegisCFO \
             Environment="${ENVIRONMENT}" \
             FTR=Compliant \
             ManagedBy=SAM
@@ -191,7 +191,7 @@ post_deploy() {
     log_info "Verifying Lambda functions..."
     FUNCTIONS=("curate" "finetune" "gateway" "resilience" "chaos" "agents")
     for func in "${FUNCTIONS[@]}"; do
-        FUNC_NAME="strata-${func}-${ENVIRONMENT}"
+        FUNC_NAME="aegis-${func}-${ENVIRONMENT}"
         if aws lambda get-function --function-name "${FUNC_NAME}" --region "${REGION}" &> /dev/null; then
             log_success "  ✓ ${FUNC_NAME}"
         else
@@ -203,7 +203,7 @@ post_deploy() {
     log_info "Verifying DynamoDB tables..."
     TABLES=("resilience-metrics" "circuit-breakers" "chaos-results" "fine-tuning-jobs")
     for table_prefix in "${TABLES[@]}"; do
-        TABLE_NAME="strata-${table_prefix}-${ENVIRONMENT}"
+        TABLE_NAME="aegis-${table_prefix}-${ENVIRONMENT}"
         if aws dynamodb describe-table --table-name "${TABLE_NAME}" --region "${REGION}" &> /dev/null; then
             log_success "  ✓ ${TABLE_NAME}"
         else
@@ -216,7 +216,7 @@ post_deploy() {
     ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
     BUCKETS=("curated-data" "model-artifacts" "resilience-logs")
     for bucket_prefix in "${BUCKETS[@]}"; do
-        BUCKET_NAME="strata-${bucket_prefix}-${ACCOUNT_ID}-${ENVIRONMENT}"
+        BUCKET_NAME="aegis-${bucket_prefix}-${ACCOUNT_ID}-${ENVIRONMENT}"
         if aws s3api head-bucket --bucket "${BUCKET_NAME}" --region "${REGION}" &> /dev/null; then
             log_success "  ✓ ${BUCKET_NAME}"
         else
@@ -228,7 +228,7 @@ post_deploy() {
 print_summary() {
     echo ""
     echo "============================================"
-    echo -e "${GREEN}Strata CFO Resilience Matrix${NC}"
+    echo -e "${GREEN}Aegis Resilience${NC}"
     echo -e "Deployment: ${GREEN}SUCCESS${NC}"
     echo "============================================"
     echo ""
@@ -251,7 +251,7 @@ print_summary() {
 main() {
     echo ""
     echo "============================================"
-    echo "Strata CFO Resilience Matrix — Deployment"
+    echo "Aegis Resilience — Deployment"
     echo "============================================"
     echo ""
 

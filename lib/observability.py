@@ -1,5 +1,5 @@
 """
-Strata CFO Resilience Matrix — Observability Library
+Aegis Resilience — Observability Library
 
 This module provides CloudWatch + X-Ray observability helpers:
 - Structured JSON logging for CloudWatch Insights
@@ -8,7 +8,7 @@ This module provides CloudWatch + X-Ray observability helpers:
 
 FTR Compliance Notes:
 - All log entries are valid JSON for CloudWatch Insights queries
-- Custom metrics use the StrataCFO namespace for consistent dashboards
+- Custom metrics use the AegisCFO namespace for consistent dashboards
 - X-Ray provides distributed tracing across all 6 Lambda layers
 - Metrics dimensions enable drill-down by agent type, model, tenant
 """
@@ -28,8 +28,8 @@ import boto3
 # Configuration
 # ---------------------------------------------------------------------------
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
-SERVICE_NAME = os.environ.get("POWERTOOLS_SERVICE_NAME", "strata")
-METRICS_NAMESPACE = os.environ.get("POWERTOOLS_METRICS_NAMESPACE", "StrataCFO")
+SERVICE_NAME = os.environ.get("POWERTOOLS_SERVICE_NAME", "aegis")
+METRICS_NAMESPACE = os.environ.get("POWERTOOLS_METRICS_NAMESPACE", "AegisCFO")
 ENVIRONMENT = os.environ.get("ENVIRONMENT", "unknown")
 AWS_REQUEST_ID = os.environ.get("AWS_REQUEST_ID", "")
 
@@ -134,7 +134,7 @@ class CloudWatchMetrics:
     CloudWatch custom metrics emitter with buffering.
 
     Buffers metrics and flushes in batches to minimize PutMetricData API calls.
-    All metrics use the StrataCFO namespace and standard dimensions.
+    All metrics use the AegisCFO namespace and standard dimensions.
 
     FTR Compliance:
     - Consistent namespace for dashboard aggregation
@@ -281,7 +281,7 @@ class XRayHelper:
             pass
 
     @staticmethod
-    def put_metadata(key: str, value: Any, namespace: str = "strata") -> None:
+    def put_metadata(key: str, value: Any, namespace: str = "aegis") -> None:
         """Add unindexed metadata to the current segment/subsegment."""
         try:
             from aws_xray_sdk.core import xray_recorder
@@ -312,7 +312,7 @@ class XRayHelper:
 
     @staticmethod
     @contextmanager
-    def subsegment(name: str, namespace: str = "strata") -> Generator[None, None, None]:
+    def subsegment(name: str, namespace: str = "aegis") -> Generator[None, None, None]:
         """Context manager for creating an X-Ray subsegment."""
         subseg = None
         try:

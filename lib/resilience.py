@@ -1,5 +1,5 @@
 """
-Strata CFO Resilience Matrix — Resilience Patterns Library
+Aegis Resilience — Resilience Patterns Library
 
 This module implements reusable resilience patterns used across the system:
 - CircuitBreaker: State machine with DynamoDB persistence
@@ -31,8 +31,8 @@ import boto3
 # ---------------------------------------------------------------------------
 # Environment Configuration (injected via SAM template)
 # ---------------------------------------------------------------------------
-CIRCUIT_BREAKERS_TABLE = os.environ.get("CIRCUIT_BREAKERS_TABLE", "strata-circuit-breakers")
-METRICS_TABLE = os.environ.get("METRICS_TABLE", "strata-resilience-metrics")
+CIRCUIT_BREAKERS_TABLE = os.environ.get("CIRCUIT_BREAKERS_TABLE", "aegis-circuit-breakers")
+METRICS_TABLE = os.environ.get("METRICS_TABLE", "aegis-resilience-metrics")
 CACHE_BUCKET = os.environ.get("CACHE_BUCKET", "")
 KMS_KEY_ID = os.environ.get("KMS_KEY_ID", "")
 

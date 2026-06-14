@@ -1,8 +1,8 @@
-# Strata CFO Resilience Matrix — Security Narrative
+# Aegis Resilience — Security Narrative
 
 ## Overview
 
-This document provides a comprehensive security narrative for the Strata CFO Resilience
+This document provides a comprehensive security narrative for the Aegis CFO Resilience
 Matrix, addressing all FTR (Foundational Technical Review) security requirements and
 AWS Well-Architected Security Pillar best practices.
 
@@ -16,7 +16,7 @@ All data stores use a customer-managed KMS key (CMK), not default AWS-managed ke
 This provides full control over key rotation, access policies, and audit trail.
 
 **KMS Key Configuration:**
-- Key ID: `alias/strata-cfo-production`
+- Key ID: `alias/aegis-production`
 - Rotation: Automatic (365-day period)
 - Policy: Restricted to specific AWS services (Lambda, DynamoDB, S3, CloudWatch Logs, Secrets Manager)
 
@@ -24,14 +24,14 @@ This provides full control over key rotation, access policies, and audit trail.
 
 | Resource | Encryption Method | Key |
 |----------|------------------|-----|
-| S3 (curated-data) | SSE-KMS | `alias/strata-cfo-production` |
-| S3 (model-artifacts) | SSE-KMS | `alias/strata-cfo-production` |
-| S3 (resilience-logs) | SSE-KMS | `alias/strata-cfo-production` |
-| S3 (cloudtrail) | SSE-KMS | `alias/strata-cfo-production` |
+| S3 (curated-data) | SSE-KMS | `alias/aegis-production` |
+| S3 (model-artifacts) | SSE-KMS | `alias/aegis-production` |
+| S3 (resilience-logs) | SSE-KMS | `alias/aegis-production` |
+| S3 (cloudtrail) | SSE-KMS | `alias/aegis-production` |
 | DynamoDB (all tables) | AWS managed KMS | CMK specified in SSESpecification |
-| Secrets Manager | KMS CMK | `alias/strata-cfo-production` |
-| CloudTrail logs | KMS CMK | `alias/strata-cfo-production` |
-| Semantic Cache (S3) | SSE-KMS | `alias/strata-cfo-production` |
+| Secrets Manager | KMS CMK | `alias/aegis-production` |
+| CloudTrail logs | KMS CMK | `alias/aegis-production` |
+| Semantic Cache (S3) | SSE-KMS | `alias/aegis-production` |
 
 ### 1.2 S3 Encryption Enforcement
 
@@ -194,8 +194,8 @@ Lambda Security Group:
 ### 5.1 Secrets Manager
 
 All credentials and configuration are stored in Secrets Manager:
-- `strata/bedrock-config-production`: Bedrock model IDs, parameters
-- `strata/opensearch-config-production`: OpenSearch connection details
+- `aegis/bedrock-config-production`: Bedrock model IDs, parameters
+- `aegis/opensearch-config-production`: OpenSearch connection details
 
 **Retrieval Pattern:**
 ```python
@@ -279,7 +279,7 @@ config = json.loads(response["SecretString"])
 
 ## 9. Security Review Summary
 
-The Strata CFO Resilience Matrix implements defense-in-depth security:
+The Aegis Resilience implements defense-in-depth security:
 1. **Perimeter**: API Gateway with Cognito auth, VPC with private subnets
 2. **Identity**: Least-privilege IAM, ABAC tenant isolation, MFA
 3. **Data**: KMS CMK encryption at rest, TLS in transit

@@ -1,4 +1,4 @@
-# Strata CFO Resilience Matrix — Python Dependencies
+# Aegis Resilience — Python Dependencies
 # Lambda runtime dependencies for all 6 layers
 # FTR: Production-grade dependencies only — no test or dev packages in Lambda
 

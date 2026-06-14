@@ -1,8 +1,8 @@
-# Strata CFO Resilience Matrix — Operational Runbook
+# Aegis Resilience — Operational Runbook
 
 ## Overview
 
-This runbook provides operational procedures for managing the Strata CFO Resilience
+This runbook provides operational procedures for managing the Aegis CFO Resilience
 Matrix in production. Follow these procedures for deployment, monitoring, incident
 response, and maintenance.
 
@@ -23,8 +23,8 @@ response, and maintenance.
 
 ```bash
 # Clone the repository
-git clone <repo-url> strata-cfo
-cd strata-cfo
+git clone <repo-url> aegis
+cd aegis
 
 # Install dependencies
 pip install -r requirements.txt
@@ -39,7 +39,7 @@ sam build --template-file template.yaml
 # Deploy to production
 sam deploy \
   --template-file .sam/build/template.yaml \
-  --stack-name strata-cfo-production \
+  --stack-name aegis-production \
   --region us-east-1 \
   --config-file samconfig.toml \
   --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND \
@@ -65,20 +65,20 @@ sam deploy \
 ```bash
 # Check stack status
 aws cloudformation describe-stacks \
-  --stack-name strata-cfo-production \
+  --stack-name aegis-production \
   --query "Stacks[0].StackStatus"
 
 # Verify Lambda functions
 aws lambda list-functions \
-  --query "Functions[?starts_with(FunctionName, 'strata-')].FunctionName"
+  --query "Functions[?starts_with(FunctionName, 'aegis-')].FunctionName"
 
 # Check API Gateway endpoint
 aws apigateway get-rest-apis \
-  --query "Items[?name=='strata-cfo-production'].endpointConfiguration"
+  --query "Items[?name=='aegis-production'].endpointConfiguration"
 
 # Verify DynamoDB tables
 aws dynamodb list-tables \
-  --query "TableNames[?contains(@, 'strata-')]"
+  --query "TableNames[?contains(@, 'aegis-')]"
 ```
 
 ---
@@ -112,13 +112,13 @@ curl -X POST https://<api-id>.execute-api.us-east-1.amazonaws.com/production/age
 
 # Invoke gateway Lambda directly (for debugging)
 aws lambda invoke \
-  --function-name strata-gateway-production \
+  --function-name aegis-gateway-production \
   --payload '{"prompt": "health check", "tenant_id": "system"}' \
   response.json
 
 # Check circuit breaker state
 aws dynamodb get-item \
-  --table-name strata-circuit-breakers-production \
+  --table-name aegis-circuit-breakers-production \
   --key '{"breaker_id": {"S": "gateway:anthic.claude-3-5-sonnet-20241022-v1:0"}}'
 ```
 
@@ -136,7 +136,7 @@ curl -X POST https://<api-id>.execute-api.us-east-1.amazonaws.com/production/cha
 
 # Check chaos results
 aws dynamodb scan \
-  --table-name strata-chaos-results-production \
+  --table-name aegis-chaos-results-production \
   --filter-expression "attribute_exists(pass_rate)"
 ```
 
@@ -190,7 +190,7 @@ Access the X-Ray console to:
 
 ### 3.4 SNS Alert Configuration
 
-Alarms notify via `strata-alerts-production` SNS topic. Subscribe:
+Alarms notify via `aegis-alerts-production` SNS topic. Subscribe:
 - Email: `ops@company.com`
 - Slack: Via SNS → Lambda → Slack webhook integration
 - PagerDuty: Via SNS → PagerDuty integration
@@ -201,13 +201,13 @@ Alarms notify via `strata-alerts-production` SNS topic. Subscribe:
 
 ### 4.1 Circuit Breaker Open
 
-**Symptom**: CloudWatch alarm `strata-circuit-breaker-open-production`
+**Symptom**: CloudWatch alarm `aegis-circuit-breaker-open-production`
 
 **Diagnosis**:
 ```bash
 # Check which model's circuit is open
 aws dynamodb scan \
-  --table-name strata-circuit-breakers-production \
+  --table-name aegis-circuit-breakers-production \
   --filter-expression "#s = :open" \
   --expression-attribute-names '{"#s": "state"}' \
   --expression-attribute-values '{":open": {"N": "2"}}'
@@ -220,7 +220,7 @@ aws dynamodb scan \
    ```bash
    # Force close circuit breaker to test recovery
    aws dynamodb update-item \
-     --table-name strata-circuit-breakers-production \
+     --table-name aegis-circuit-breakers-production \
      --key '{"breaker_id": {"S": "gateway:<model-id>"}}' \
      --update-expression "SET #s = :closed, failure_count = :zero" \
      --expression-attribute-names '{"#s": "state"}' \
@@ -245,7 +245,7 @@ aws dynamodb scan \
 
 ### 4.3 High Latency
 
-**Symptom**: CloudWatch alarm `strata-gateway-latency-production`
+**Symptom**: CloudWatch alarm `aegis-gateway-latency-production`
 
 **Response**:
 1. Check Bedrock model latency in X-Ray traces
@@ -264,7 +264,7 @@ aws dynamodb scan \
 4. Manual trigger if needed:
    ```bash
    aws lambda invoke \
-     --function-name strata-curate-production \
+     --function-name aegis-curate-production \
      --invocation-type Event
    ```
 
@@ -284,19 +284,19 @@ The CHP state machine triggers automatic rollback if:
 ```bash
 # Check deployment history
 aws cloudformation describe-stack-events \
-  --stack-name strata-cfo-production \
+  --stack-name aegis-production \
   --max-items 20
 
 # Rollback to previous version
 aws cloudformation deploy \
   --template-file template-previous.yaml \
-  --stack-name strata-cfo-production \
+  --stack-name aegis-production \
   --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND \
   --no-fail-on-empty-changeset
 
 # Force circuit breaker reset after rollback
 aws dynamodb scan \
-  --table-name strata-circuit-breakers-production \
+  --table-name aegis-circuit-breakers-production \
   --attributes-to-get breaker_id \
   --projection-expression "breaker_id"
 ```
@@ -321,7 +321,7 @@ aws dynamodb scan \
 
 Keys are set to auto-rotate (365-day period). Verify:
 ```bash
-aws kms describe-key --key-id alias/strata-cfo-production --query "KeyMetadata.Enabled"
+aws kms describe-key --key-id alias/aegis-production --query "KeyMetadata.Enabled"
 ```
 
 ### 6.3 Scaling Adjustments
@@ -329,7 +329,7 @@ aws kms describe-key --key-id alias/strata-cfo-production --query "KeyMetadata.E
 To adjust provisioned concurrency:
 ```bash
 aws lambda update-function-configuration \
-  --function-name strata-gateway-production \
+  --function-name aegis-gateway-production \
   --provisioned-concurrency-config ProvisionedConcurrentExecutions=10
 ```
 

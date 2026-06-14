@@ -1,26 +1,26 @@
 version = 0.1
 [default.deploy.parameters]
-stack_name = "strata-cfo-production"
+stack_name = "aegis-production"
 resolve_s3 = true
-s3_prefix = "strata-cfo"
+s3_prefix = "aegis"
 region = "us-east-1"
 confirm_changeset = false
 capabilities = "CAPABILITY_IAM CAPABILITY_AUTO_EXPAND"
 parameter_overrides = "Environment = \"production\" ChaosSchedule = \"cron(0 */6 * * ? *)\""
 
 [staging.deploy.parameters]
-stack_name = "strata-cfo-staging"
+stack_name = "aegis-staging"
 resolve_s3 = true
-s3_prefix = "strata-cfo-staging"
+s3_prefix = "aegis-staging"
 region = "us-east-1"
 confirm_changeset = false
 capabilities = "CAPABILITY_IAM CAPABILITY_AUTO_EXPAND"
 parameter_overrides = "Environment = \"staging\" ChaosSchedule = \"cron(0 0 * * ? *)\""
 
 [development.deploy.parameters]
-stack_name = "strata-cfo-development"
+stack_name = "aegis-development"
 resolve_s3 = true
-s3_prefix = "strata-cfo-dev"
+s3_prefix = "aegis-dev"
 region = "us-east-1"
 confirm_changeset = false
 capabilities = "CAPABILITY_IAM CAPABILITY_AUTO_EXPAND"

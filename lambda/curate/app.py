@@ -1,7 +1,7 @@
 """
-Strata CFO Resilience Matrix — Layer 1: Data Curation Lambda
+Aegis Resilience — Layer 1: Data Curation Lambda
 
-This Lambda function implements the Data Curation layer of the Strata resilience system.
+This Lambda function implements the Data Curation layer of the Aegis resilience system.
 It fetches raw failure logs from S3, normalizes patterns into structured format,
 stores curated datasets back to S3, updates DynamoDB metrics, and indexes in OpenSearch.
 
@@ -36,8 +36,8 @@ OPENSEARCH_SECRET_ARN = os.environ.get("OPENSEARCH_SECRET_ARN", "")
 KMS_KEY_ID = os.environ.get("KMS_KEY_ID", "")
 
 # Initialize AWS Lambda Powertools for structured logging, metrics, and tracing
-logger = Logger(service="strata-curate")
-metrics = Metrics(namespace="StrataCFO")
+logger = Logger(service="aegis-curate")
+metrics = Metrics(namespace="AegisCFO")
 tracer = Tracer()
 
 # AWS SDK clients — lazy initialization for container reuse
@@ -154,7 +154,7 @@ def classify_failure(log_entry: Dict[str, Any]) -> Dict[str, Any]:
 @tracer.capture_method
 def normalize_log_entry(raw_entry: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Normalize a raw log entry into the Strata structured format.
+    Normalize a raw log entry into the Aegis structured format.
 
     Normalization ensures consistent schema across all failure sources:
     - Timestamps normalized to ISO 8601 UTC

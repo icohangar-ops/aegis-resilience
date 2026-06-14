@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
-  Strata VPC Flow Logs — Nested Stack
+  Aegis VPC Flow Logs — Nested Stack
   Configures VPC Flow Logs delivery to CloudWatch Logs and S3.
 
   FTR Requirement: VPC Flow Logs must be enabled for network traffic auditing.
@@ -48,7 +48,7 @@ Resources:
     Type: AWS::Logs::LogGroup
     Condition: CreateLogGroup
     Properties:
-      LogGroupName: !If [CreateLogGroup, !Ref LogGroupName, !Sub "/strata/vpc-flow-logs-${VpcId}"]
+      LogGroupName: !If [CreateLogGroup, !Ref LogGroupName, !Sub "/aegis/vpc-flow-logs-${VpcId}"]
       RetentionInDays: !Ref RetentionDays
       Tags:
         - Key: Compliance
@@ -61,12 +61,12 @@ Resources:
       ResourceType: VPC
       ResourceId: !Ref VpcId
       TrafficType: !Ref TrafficType
-      LogGroupName: !If [CreateLogGroup, !Ref LogGroupName, !Sub "/strata/vpc-flow-logs-${VpcId}"]
+      LogGroupName: !If [CreateLogGroup, !Ref LogGroupName, !Sub "/aegis/vpc-flow-logs-${VpcId}"]
       DeliverLogsPermissionArn: !GetAtt FlowLogRole.Arn
       LogDestinationType: cloud-watch-logs
       Tags:
         - Key: Name
-          Value: !Sub "strata-flow-log-${VpcId}"
+          Value: !Sub "aegis-flow-log-${VpcId}"
         - Key: Compliance
           Value: FTR-VPCFlowLogs
 
@@ -79,4 +79,4 @@ Outputs:
     Value: !Ref FlowLog
   LogGroupName:
     Description: CloudWatch Log Group receiving flow logs
-    Value: !If [CreateLogGroup, !Ref LogGroupName, !Sub "/strata/vpc-flow-logs-${VpcId}"]
+    Value: !If [CreateLogGroup, !Ref LogGroupName, !Sub "/aegis/vpc-flow-logs-${VpcId}"]

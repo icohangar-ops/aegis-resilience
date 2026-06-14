@@ -1,7 +1,7 @@
 """
-Strata CFO Resilience Matrix — State Management Library
+Aegis Resilience — State Management Library
 
-This module manages state across the Strata system:
+This module manages state across the Aegis system:
 - S3 workflow state (job tracking, artifact versioning)
 - DynamoDB metadata (metrics, circuit breaker state, tenant config)
 - Tenant isolation (ABAC enforcement)
@@ -201,7 +201,7 @@ class WorkflowStateManager:
 # =========================================================================
 class MetadataManager:
     """
-    Manages DynamoDB metadata for the Strata system.
+    Manages DynamoDB metadata for the Aegis system.
 
     Handles:
     - Resilience metrics aggregation

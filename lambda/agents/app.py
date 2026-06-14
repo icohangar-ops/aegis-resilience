@@ -1,5 +1,5 @@
 """
-Strata CFO Resilience Matrix — Layer 6: CFO Agents Lambda
+Aegis Resilience — Layer 6: CFO Agents Lambda
 
 This Lambda function implements 4 specialized CFO agents that each run through
 the resilience stack before reaching the LLM:
@@ -45,8 +45,8 @@ KMS_KEY_ID = os.environ.get("KMS_KEY_ID", "")
 
 PRIMARY_MODEL_ID = os.environ.get("PRIMARY_MODEL_ID", "anthropic.claude-3-5-sonnet-20241022-v1:0")
 
-logger = Logger(service="strata-agents")
-metrics = Metrics(namespace="StrataCFO")
+logger = Logger(service="aegis-agents")
+metrics = Metrics(namespace="AegisCFO")
 tracer = Tracer()
 
 _bedrock_runtime = None

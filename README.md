@@ -1,4 +1,4 @@
-# Strata CFO Resilience Matrix
+# Aegis Resilience
 
 [![Apache 2.0 License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![AWS FTR Compliant](https://img.shields.io/badge/FTR-Compliant-brightgreen)](docs/WELL_ARCHITECTED.md)
@@ -100,7 +100,7 @@ Every LLM request flows through all 6 layers sequentially.
 ## Project Structure
 
 ```
-strata-aws-native/
+aegis-resilience/
 ├── template.yaml                    # Full SAM template (100% IaC)
 ├── samconfig.toml                  # SAM deploy configuration
 ├── requirements.txt                # Python dependencies
@@ -164,7 +164,7 @@ aws configure
 
 # Clone the repository
 git clone <repo-url>
-cd strata-aws-native
+cd aegis-resilience
 ```
 
 ### Deploy

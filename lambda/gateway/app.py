@@ -1,5 +1,5 @@
 """
-Strata CFO Resilience Matrix — Layer 3: Agent Gateway Lambda
+Aegis Resilience — Layer 3: Agent Gateway Lambda
 
 This Lambda function implements the Agent Gateway layer that routes LLM requests
 to AWS Bedrock with health checks, circuit breaker pattern, automatic fallback
@@ -58,8 +58,8 @@ MODEL_COSTS = {
 # Fallback chain — ordered by model quality preference
 MODEL_CHAIN = [PRIMARY_MODEL_ID, FALLBACK_MODEL_ID, TERTIARY_MODEL_ID]
 
-logger = Logger(service="strata-gateway")
-metrics = Metrics(namespace="StrataCFO")
+logger = Logger(service="aegis-gateway")
+metrics = Metrics(namespace="AegisCFO")
 tracer = Tracer()
 
 _bedrock_runtime = None

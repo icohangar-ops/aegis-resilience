@@ -1,5 +1,5 @@
 """
-Strata CFO Resilience Matrix — Layer 2: Fine-Tuning Pipeline Lambda
+Aegis Resilience — Layer 2: Fine-Tuning Pipeline Lambda
 
 This Lambda function manages the fine-tuning pipeline for CFO-specific models:
 - Reads curated data from S3
@@ -36,8 +36,8 @@ BEDROCK_SECRET_ARN = os.environ.get("BEDROCK_SECRET_ARN", "")
 KMS_KEY_ID = os.environ.get("KMS_KEY_ID", "")
 PRIMARY_MODEL_ID = os.environ.get("PRIMARY_MODEL_ID", "anthropic.claude-3-5-sonnet-20241022-v1:0")
 
-logger = Logger(service="strata-finetune")
-metrics = Metrics(namespace="StrataCFO")
+logger = Logger(service="aegis-finetune")
+metrics = Metrics(namespace="AegisCFO")
 tracer = Tracer()
 
 _s3_client = None
@@ -305,11 +305,11 @@ def format_bedrock_training_config(job_id: str, training_data: Dict[str, Any]) -
     bedrock_config = get_bedrock_config()
 
     return {
-        "jobName": f"strata-cfo-{job_id}",
+        "jobName": f"aegis-{job_id}",
         "baseModelIdentifier": bedrock_config.get("primary_model", PRIMARY_MODEL_ID),
-        "customModelName": f"strata-cfo-finetuned-{job_id[:8]}",
+        "customModelName": f"aegis-finetuned-{job_id[:8]}",
         "customModelTags": [
-            {"key": "Project", "value": "StrataCFO"},
+            {"key": "Project", "value": "AegisCFO"},
             {"key": "Environment", "value": os.environ.get("ENVIRONMENT", "production")},
             {"key": "JobId", "value": job_id},
         ],
@@ -364,7 +364,7 @@ def check_job_status(job_id: str) -> Dict[str, Any]:
     """
     Check the status of a Bedrock fine-tuning job.
 
-    Maps Bedrock job statuses to Strata JobStatus enum.
+    Maps Bedrock job statuses to Aegis JobStatus enum.
     """
     bedrock = get_bedrock_client()
     table = get_dynamodb_table()
@@ -419,7 +419,7 @@ def check_job_status(job_id: str) -> Dict[str, Any]:
         return {
             "job_id": job_id,
             "bedrock_status": bedrock_status,
-            "strata_status": mapped_status.value,
+            "aegis_status": mapped_status.value,
             "model_arn": response.get("outputModelArn", ""),
         }
 
@@ -592,7 +592,7 @@ def lambda_handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, A
                 return {"statusCode": 400, "body": {"error": "job_id required for status check"}}
 
             status = check_job_status(job_id)
-            version = version_model_artifact(job_id, status.get("strata_status", ""))
+            version = version_model_artifact(job_id, status.get("aegis_status", ""))
 
             return {
                 "statusCode": 200,

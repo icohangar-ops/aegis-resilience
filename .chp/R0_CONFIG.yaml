@@ -1,8 +1,8 @@
-# Strata CFO Resilience Matrix — R0 Configuration
+# Aegis Resilience — R0 Configuration
 # Initial Release Configuration for FTR Submission
 
 version: "1.0"
-project: "strata-cfo-resilience-matrix"
+project: "aegis-resilience-matrix"
 environment: "production"
 release: "R0"
 
@@ -87,7 +87,7 @@ bedrock:
 monitoring:
   cloudwatch:
     log_retention_days: 30
-    metrics_namespace: "StrataCFO"
+    metrics_namespace: "AegisCFO"
     alarms:
       - name: "gateway_errors"
         metric: "Errors"

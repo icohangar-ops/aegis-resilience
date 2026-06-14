@@ -1,5 +1,5 @@
 """
-Strata CFO Resilience Matrix — Circuit Breaker Tests
+Aegis Resilience — Circuit Breaker Tests
 
 Comprehensive tests for the circuit breaker pattern with DynamoDB state.
 
