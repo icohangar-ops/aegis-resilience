@@ -25,6 +25,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, Union
 
 import boto3
+from botocore.config import Config as BotocoreConfig
 
 logger = logging.getLogger(__name__)
 
@@ -164,7 +165,7 @@ class BedrockClient:
                 "region_name": self.region_name,
             }
             if self.timeout_ms:
-                config["config"] = boto3.Config(
+                config["config"] = BotocoreConfig(
                     connect_timeout=self.timeout_ms / 1000,
                     read_timeout=self.timeout_ms / 1000,
                     retries={"max_attempts": 0},  # FTR: We handle retries in resilience stack
