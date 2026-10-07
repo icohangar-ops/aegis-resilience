@@ -29,7 +29,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lambda", "resi
 from lib.resilience import (
     CircuitBreaker, CircuitState,
     SemanticCache, GracefulDegradation,
-    RetryWithBackoff, retry_with_backoff, RetryExhaustedError,
+    retry_with_backoff, RetryExhaustedError,
 )
 
 
@@ -214,15 +214,15 @@ class TestSemanticCache:
     def test_compute_key_deterministic(self):
         """Cache key computation should be deterministic."""
         cache = SemanticCache()
-        key1 = cache._compute_key("hello", "claude-3", "system")
-        key2 = cache._compute_key("hello", "claude-3", "system")
+        key1 = cache._compute_key("hello", "nova-pro", "system")
+        key2 = cache._compute_key("hello", "nova-pro", "system")
         assert key1 == key2
 
     def test_compute_key_different_prompts(self):
         """Different prompts should produce different keys."""
         cache = SemanticCache()
-        key1 = cache._compute_key("hello", "claude-3", "system")
-        key2 = cache._compute_key("goodbye", "claude-3", "system")
+        key1 = cache._compute_key("hello", "nova-pro", "system")
+        key2 = cache._compute_key("goodbye", "nova-pro", "system")
         assert key1 != key2
 
     def test_cache_hit(self, mock_s3):
@@ -232,11 +232,11 @@ class TestSemanticCache:
             "Body": MagicMock(read=MagicMock(return_value=json.dumps({
                 "response": "cached answer",
                 "cached_at": now,
-                "model_id": "claude-3",
+                "model_id": "nova-pro",
             }).encode()))
         }
         cache = SemanticCache()
-        result = cache.get("test prompt", "claude-3")
+        result = cache.get("test prompt", "nova-pro")
         assert result is not None
         assert result["response"] == "cached answer"
 
@@ -244,13 +244,13 @@ class TestSemanticCache:
         """Should return None for nonexistent cache keys."""
         mock_s3.get_object.side_effect = Exception("NoSuchKey")
         cache = SemanticCache()
-        result = cache.get("nonexistent prompt", "claude-3")
+        result = cache.get("nonexistent prompt", "nova-pro")
         assert result is None
 
     def test_cache_put(self, mock_s3):
         """Should store response in S3."""
         cache = SemanticCache()
-        success = cache.put("test prompt", "claude-3", "response text")
+        success = cache.put("test prompt", "nova-pro", "response text")
         assert success is True
         mock_s3.put_object.assert_called_once()
 

@@ -422,7 +422,7 @@ class ChaosTest:
         injector = ChaosInjector(ChaosScenario.LLM_OUTAGE, failure_rate=0.6)
 
         model_results = []
-        models = ["claude", "titan", "llama"]
+        models = ["nova", "titan", "llama"]
 
         for model in models:
             success = not injector.should_inject()

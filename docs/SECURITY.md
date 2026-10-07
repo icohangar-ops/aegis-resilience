@@ -109,15 +109,22 @@ Every Lambda function has a dedicated IAM role with explicit, least-privilege po
   "Effect": "Allow",
   "Action": ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"],
   "Resource": [
-    "arn:aws:bedrock:${Region}::foundation-model/anthic.claude-3-5-sonnet-20241022-v1:0",
+    "arn:aws:bedrock:${Region}::foundation-model/amazon.nova-*",
+    "arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-*",
+    "arn:aws:bedrock:us-east-2::foundation-model/amazon.nova-*",
+    "arn:aws:bedrock:us-west-2::foundation-model/amazon.nova-*",
+    "arn:aws:bedrock:${Region}:${Account}:inference-profile/us.amazon.nova-*",
     "arn:aws:bedrock:${Region}::foundation-model/amazon.titan-text-premier-v1:0",
     "arn:aws:bedrock:${Region}::foundation-model/meta.llama3-70b-instruct-v1:0"
   ]
 }
 ```
 
+Invoke permissions cover Amazon Nova only. Anthropic Claude ids are not granted: Claude on Bedrock is billed through AWS Marketplace and is outside this account's promotional credits. The `us.amazon.nova-*` inference profile is account-scoped; the US geo profile also needs the foundation-model ARN in each destination Region (us-east-1, us-east-2, us-west-2).
+
 **Key IAM Decisions:**
 - No wildcard `Resource: "*"` on data plane actions
+- Nova access is limited to `amazon.nova-*` foundation models and `us.amazon.nova-*` inference profiles
 - Specific S3 bucket ARNs (not `arn:aws:s3:::*`)
 - Specific DynamoDB table ARNs (not `arn:aws:dynamodb:*:table/*`)
 - KMS key ARN specified (not `*`)

@@ -52,20 +52,30 @@ Parameters:
 
   BedrockModelId:
     Type: String
-    Default: anthropic.claude-3-5-sonnet-20241022-v1:0
+    Default: us.amazon.nova-pro-v1:0
+    AllowedPattern: '^(?!.*anthropic\.).+$'
+    ConstraintDescription: >
+      Anthropic Claude model ids (anthropic.*) are not allowed. Claude on Bedrock
+      is billed through AWS Marketplace. Use an Amazon Nova model such as
+      us.amazon.nova-pro-v1:0.
     Description: >
-      Primary Bedrock model identifier. FTR Requirement: Configurable for model swapping
-      without code changes.
+      Primary Bedrock model identifier. Default is Amazon Nova Pro via the US geo
+      inference profile (us-east-1). Override with any non-Anthropic model id.
+      FTR Requirement: Configurable for model swapping without code changes.
 
   FallbackModelId:
     Type: String
     Default: amazon.titan-text-premier-v1:0
+    AllowedPattern: '^(?!.*anthropic\.).+$'
+    ConstraintDescription: Anthropic Claude model ids (anthropic.*) are not allowed.
     Description: >
       Fallback Bedrock model when primary fails. Demonstrates multi-model resilience.
 
   TertiaryModelId:
     Type: String
     Default: meta.llama3-70b-instruct-v1:0
+    AllowedPattern: '^(?!.*anthropic\.).+$'
+    ConstraintDescription: Anthropic Claude model ids (anthropic.*) are not allowed.
     Description: >
       Tertiary Bedrock model for 3-deep fallback chain.
 
@@ -793,10 +803,11 @@ Resources:
           "primary_model": "${BedrockModelId}",
           "fallback_model": "${FallbackModelId}",
           "tertiary_model": "${TertiaryModelId}",
+          "region": "us-east-1",
+          "api": "converse",
           "max_tokens": 4096,
           "temperature": 0.7,
-          "top_p": 0.9,
-          "anthropic_version": "bedrock-2023-05-31"
+          "top_p": 0.9
         }
       KmsKeyId: !Ref AegisKMSKey
 
@@ -1010,7 +1021,10 @@ Resources:
                   - bedrock:GetModelCustomizationJob
                   - bedrock:StopModelCustomizationJob
                   - bedrock:ListModelCustomizationJobs
-                Resource: !Sub "arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:model-customization-job/*"
+                Resource:
+                  - !Sub "arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:model-customization-job/*"
+                  - !Sub "arn:aws:bedrock:${AWS::Region}::foundation-model/amazon.nova-*"
+                  - !Sub "arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.amazon.nova-*"
         - PolicyName: KMSAccess
           PolicyDocument:
             Version: '2012-10-17'
@@ -1055,7 +1069,11 @@ Resources:
                   - bedrock:InvokeModel
                   - bedrock:InvokeModelWithResponseStream
                 Resource:
-                  - !Sub "arn:aws:bedrock:${AWS::Region}::foundation-model/${BedrockModelId}"
+                  - !Sub "arn:aws:bedrock:${AWS::Region}::foundation-model/amazon.nova-*"
+                  - !Sub "arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-*"
+                  - !Sub "arn:aws:bedrock:us-east-2::foundation-model/amazon.nova-*"
+                  - !Sub "arn:aws:bedrock:us-west-2::foundation-model/amazon.nova-*"
+                  - !Sub "arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.amazon.nova-*"
                   - !Sub "arn:aws:bedrock:${AWS::Region}::foundation-model/${FallbackModelId}"
                   - !Sub "arn:aws:bedrock:${AWS::Region}::foundation-model/${TertiaryModelId}"
         - PolicyName: DynamoDBCircuitBreakerAccess
@@ -1132,7 +1150,11 @@ Resources:
                 Action:
                   - bedrock:InvokeModel
                 Resource:
-                  - !Sub "arn:aws:bedrock:${AWS::Region}::foundation-model/${BedrockModelId}"
+                  - !Sub "arn:aws:bedrock:${AWS::Region}::foundation-model/amazon.nova-*"
+                  - !Sub "arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-*"
+                  - !Sub "arn:aws:bedrock:us-east-2::foundation-model/amazon.nova-*"
+                  - !Sub "arn:aws:bedrock:us-west-2::foundation-model/amazon.nova-*"
+                  - !Sub "arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.amazon.nova-*"
                   - !Sub "arn:aws:bedrock:${AWS::Region}::foundation-model/${FallbackModelId}"
                   - !Sub "arn:aws:bedrock:${AWS::Region}::foundation-model/${TertiaryModelId}"
         - PolicyName: DynamoDBAccess
@@ -1286,7 +1308,11 @@ Resources:
                 Action:
                   - bedrock:InvokeModel
                 Resource:
-                  - !Sub "arn:aws:bedrock:${AWS::Region}::foundation-model/${BedrockModelId}"
+                  - !Sub "arn:aws:bedrock:${AWS::Region}::foundation-model/amazon.nova-*"
+                  - !Sub "arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-*"
+                  - !Sub "arn:aws:bedrock:us-east-2::foundation-model/amazon.nova-*"
+                  - !Sub "arn:aws:bedrock:us-west-2::foundation-model/amazon.nova-*"
+                  - !Sub "arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.amazon.nova-*"
                   - !Sub "arn:aws:bedrock:${AWS::Region}::foundation-model/${FallbackModelId}"
                   - !Sub "arn:aws:bedrock:${AWS::Region}::foundation-model/${TertiaryModelId}"
         - PolicyName: SecretsAccess

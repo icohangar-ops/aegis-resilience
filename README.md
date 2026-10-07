@@ -26,13 +26,13 @@ Designed for AWS Partner Network Foundational Technical Review (FTR) submission.
 │ CashFlow │ 9 Chaos  │ 6-Layer  │ Circuit  │ Bedrock  │ S3 → Norm  │
 │ Risk     │ Scenarios│ Protect  │ Breaker  │ Training │ Classify   │
 │ Treasury │ Automated│ Retry    │ Fallback │ Version  │ Store      │
-│Compliance│ Testing  │ Cache    │ Claude→  │ Control  │ Metrics    │
+│Compliance│ Testing  │ Cache    │ Nova →   │ Control  │ Metrics    │
 │          │          │ Degrade  │ Titan→   │          │            │
 │          │          │ Timeout  │ LLaMA    │          │            │
 ├──────────┴──────────┴──────────┴──────────┴──────────┴────────────┤
 │  AWS Bedrock  │ S3 (KMS) │ DynamoDB (KMS) │ OpenSearch │ Cognito  │
-│  Claude/Titan │ 3 Bucket │ 4 Tables       │ Serverless │ ABAC JWT  │
-│  LLaMA       │          │ TTL + PITR     │            │ MFA       │
+│  Nova Pro     │ 3 Bucket │ 4 Tables       │ Serverless │ ABAC JWT  │
+│  Titan/LLaMA  │          │ TTL + PITR     │            │ MFA       │
 ├──────────────┴──────────┴─────────────────┴────────────┴──────────┤
 │  KMS CMK │ CloudWatch │ X-Ray │ Custom VPC (2 AZs) │ CloudTrail  │
 │  Encrypt  │ Logs+Metrics│ Trace│ Private Subnets    │ + VPC Flows │
@@ -47,7 +47,7 @@ Designed for AWS Partner Network Foundational Technical Review (FTR) submission.
 |-------|------|-----------|
 | **1** | **Retry with Backoff** | Exponential backoff with jitter for transient failures |
 | **2** | **Circuit Breaker** | DynamoDB-persisted state machine (OPEN/HALF_OPEN/CLOSED) |
-| **3** | **Model Fallback** | Claude → Titan → LLaMA automatic chain |
+| **3** | **Model Fallback** | Nova Pro → Titan → LLaMA automatic chain |
 | **4** | **Semantic Cache** | S3-backed, TTL-based content-addressable cache |
 | **5** | **Graceful Degradation** | L0→L3 progressive context reduction |
 | **6** | **Hard Timeout** | 30-second absolute deadline enforcement |
@@ -60,7 +60,7 @@ Every LLM request flows through all 6 layers sequentially.
 
 | Service | Purpose |
 |---------|---------|
-| **AWS Bedrock** | LLM inference (Claude 3.5 Sonnet, Titan, LLaMA) |
+| **AWS Bedrock** | LLM inference via the Converse API (Amazon Nova Pro `us.amazon.nova-pro-v1:0` in us-east-1, Titan and LLaMA fallbacks). `BedrockModelId` overrides the model; `anthropic.*` ids are rejected. |
 | **AWS Lambda (Python 3.12)** | 6 serverless functions (one per layer) |
 | **Amazon S3** | Curated datasets, model artifacts, resilience logs |
 | **Amazon DynamoDB** | Resilience metrics, circuit breaker state, chaos results |

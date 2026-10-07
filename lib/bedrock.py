@@ -1,19 +1,24 @@
 """
 Aegis Resilience — Shared Bedrock Client Library
 
-This module provides a production-grade wrapper around boto3 Bedrock Runtime
-with multi-model support, guardrails integration, token counting, and
-invocation logging.
+Production wrapper around the Amazon Bedrock Converse API. Converse uses one
+request and response shape for every supported model, so callers do not build
+provider-specific payloads.
+
+Default model: Amazon Nova Pro via the US geo inference profile
+``us.amazon.nova-pro-v1:0`` in us-east-1. A model-id override is allowed.
+Anthropic Claude ids (``anthropic.*``, including geo profiles such as
+``us.anthropic.*``) are rejected: Claude on Bedrock is billed through AWS
+Marketplace and is not covered by promotional credits on this account.
 
 FTR Compliance Notes:
-- All model invocations use explicit model ARNs (no wildcards)
+- Model invocations name an explicit model id (no wildcard model ids at runtime)
 - Token counting for cost governance
 - Guardrails integration for content safety
 - Invocation logging for audit trail
-- Multi-model abstraction for seamless fallback
+- Model-agnostic Converse calls so fallback models share one code path
 """
 
-import hashlib
 import json
 import logging
 import os
@@ -22,7 +27,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 import boto3
 from botocore.config import Config as BotocoreConfig
@@ -32,16 +37,29 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
+DEFAULT_MODEL_ID = "us.amazon.nova-pro-v1:0"
+DEFAULT_REGION = "us-east-1"
 DEFAULT_MAX_TOKENS = 4096
 DEFAULT_TEMPERATURE = 0.7
 DEFAULT_TOP_P = 0.9
 DEFAULT_TIMEOUT_MS = 30000
 
-# Approximate cost per 1K tokens (USD) — updated quarterly
-# FTR: Cost tracking for budget governance
+# Geo prefixes used by Bedrock cross-region inference profiles.
+_GEO_PREFIXES = ("us.", "eu.", "apac.", "global.")
+_PROVIDER_PREFIXES = ("amazon.", "meta.", "anthropic.", "cohere.", "mistral.", "ai21.")
+
+# Approximate on-demand cost per 1K tokens (USD), us-east-1.
+# Nova Pro: $0.80 / 1M input, $3.20 / 1M output.
+# Nova Lite: $0.06 / 1M input, $0.24 / 1M output.
+# Nova Micro: $0.035 / 1M input, $0.14 / 1M output.
+# Nova Premier: $2.50 / 1M input, $12.50 / 1M output.
+# Keys are foundation-model ids. Inference-profile ids (us.amazon.nova-*)
+# resolve to the same row after the geo prefix is stripped.
 MODEL_COSTS = {
-    "anthropic.claude-3-5-sonnet-20241022-v1:0": {"input_per_1k": 0.003, "output_per_1k": 0.015},
-    "anthropic.claude-3-sonnet-20240229-v1:0": {"input_per_1k": 0.003, "output_per_1k": 0.015},
+    "amazon.nova-pro-v1:0": {"input_per_1k": 0.0008, "output_per_1k": 0.0032},
+    "amazon.nova-lite-v1:0": {"input_per_1k": 0.00006, "output_per_1k": 0.00024},
+    "amazon.nova-micro-v1:0": {"input_per_1k": 0.000035, "output_per_1k": 0.00014},
+    "amazon.nova-premier-v1:0": {"input_per_1k": 0.0025, "output_per_1k": 0.0125},
     "amazon.titan-text-premier-v1:0": {"input_per_1k": 0.0008, "output_per_1k": 0.0016},
     "amazon.titan-text-express-v1:0": {"input_per_1k": 0.0004, "output_per_1k": 0.0008},
     "meta.llama3-70b-instruct-v1:0": {"input_per_1k": 0.00265, "output_per_1k": 0.0035},
@@ -49,31 +67,76 @@ MODEL_COSTS = {
 }
 
 
+class UnsupportedModelError(ValueError):
+    """Raised when a model id is an Anthropic Claude model."""
+
+
+def canonical_model_id(model_id: str) -> str:
+    """Strip a geo inference-profile prefix, leaving the foundation-model id."""
+    raw = (model_id or "").strip()
+    lower = raw.lower()
+    for prefix in _GEO_PREFIXES:
+        if lower.startswith(prefix):
+            rest = raw[len(prefix):]
+            if rest.lower().startswith(_PROVIDER_PREFIXES):
+                return rest
+            break
+    return raw
+
+
+def assert_model_allowed(model_id: str) -> str:
+    """
+    Accept a model-id override and reject Anthropic Claude ids.
+
+    Rejects ``anthropic.*`` and geo profiles such as ``us.anthropic.*``.
+    """
+    if model_id is None or not str(model_id).strip():
+        raise UnsupportedModelError("A model id is required.")
+    raw = str(model_id).strip()
+    normalized = canonical_model_id(raw).lower()
+    if normalized.startswith("anthropic.") or "/anthropic." in normalized:
+        raise UnsupportedModelError(
+            f"Model id '{raw}' is not allowed. Anthropic Claude models (anthropic.*) "
+            "are billed through AWS Marketplace and are not covered by promotional "
+            "credits on this account. Use an Amazon Nova model id such as "
+            f"{DEFAULT_MODEL_ID}."
+        )
+    return raw
+
+
+def model_from_env(name: str, default: str = DEFAULT_MODEL_ID) -> str:
+    """Read a model id from the environment, applying the Anthropic rejection."""
+    return assert_model_allowed(os.environ.get(name, default))
+
+
 class ModelFamily(Enum):
     """Supported Bedrock model families."""
-    ANTHROPIC_CLAUDE = "anthropic"
+    AMAZON_NOVA = "nova"
     AMAZON_TITAN = "amazon"
     META_LLAMA = "meta"
     AI21_JURASSIC = "ai21"
     COHERE_COMMAND = "cohere"
     MISTRAL = "mistral"
+    ANTHROPIC_CLAUDE = "anthropic"
     UNKNOWN = "unknown"
 
     @classmethod
     def from_model_id(cls, model_id: str) -> "ModelFamily":
-        """Detect model family from model ID string."""
-        model_lower = model_id.lower()
-        if "claude" in model_lower or "anthropic" in model_lower:
+        """Detect model family from a model id or inference-profile id."""
+        model_lower = canonical_model_id(model_id).lower()
+        if model_lower.startswith("anthropic.") or "claude" in model_lower:
             return cls.ANTHROPIC_CLAUDE
-        elif "titan" in model_lower or "amazon" in model_lower:
+        if "nova" in model_lower:
+            return cls.AMAZON_NOVA
+        if "titan" in model_lower:
             return cls.AMAZON_TITAN
-        elif "llama" in model_lower or "meta" in model_lower:
+        if "llama" in model_lower or model_lower.startswith("meta."):
             return cls.META_LLAMA
-        elif "jamba" in model_lower or "ai21" in model_lower:
+        if "jamba" in model_lower or model_lower.startswith("ai21."):
             return cls.AI21_JURASSIC
-        elif "command" in model_lower or "cohere" in model_lower:
+        if "command" in model_lower or model_lower.startswith("cohere."):
             return cls.COHERE_COMMAND
-        elif "mistral" in model_lower or "mixtral" in model_lower:
+        if "mistral" in model_lower or "mixtral" in model_lower:
             return cls.MISTRAL
         return cls.UNKNOWN
 
@@ -95,6 +158,7 @@ class BedrockRequest:
 
     def __post_init__(self):
         """Validate request parameters — FTR: Input validation."""
+        self.model_id = assert_model_allowed(self.model_id)
         if not self.prompt:
             raise ValueError("prompt is required")
         if self.max_tokens < 1 or self.max_tokens > 8192:
@@ -127,18 +191,14 @@ class BedrockResponse:
 
 class BedrockClient:
     """
-    Production-grade Bedrock Runtime client with multi-model support.
+    Production-grade Bedrock Runtime client.
 
-    Features:
-    - Multi-model abstraction (Claude, Titan, LLaMA)
-    - Automatic request formatting per model family
-    - Token counting and cost estimation
-    - Guardrails integration
-    - Invocation logging
-    - Timeout handling
+    Invocations go through the Converse API so Nova, Titan, and Llama share
+    one request and response shape. The default model is Amazon Nova Pro
+    (``us.amazon.nova-pro-v1:0``).
 
     FTR Compliance:
-    - Explicit model ARNs (no wildcards)
+    - Explicit model ids (no wildcards)
     - Timeout enforcement prevents hanging
     - Cost tracking for budget governance
     """
@@ -148,10 +208,12 @@ class BedrockClient:
         region_name: Optional[str] = None,
         secrets_manager_arn: Optional[str] = None,
         timeout_ms: int = DEFAULT_TIMEOUT_MS,
+        default_model_id: str = DEFAULT_MODEL_ID,
     ):
-        self.region_name = region_name or os.environ.get("AWS_REGION", "us-east-1")
+        self.region_name = region_name or os.environ.get("AWS_REGION", DEFAULT_REGION)
         self.secrets_manager_arn = secrets_manager_arn
         self.timeout_ms = timeout_ms
+        self.default_model_id = assert_model_allowed(default_model_id)
         self._client = None
         self._config = None
         self._invocation_log: List[Dict[str, Any]] = []
@@ -199,148 +261,108 @@ class BedrockClient:
 
         FTR: Cost tracking enables budget governance and chargeback.
         """
-        costs = MODEL_COSTS.get(model_id, {"input_per_1k": 0.001, "output_per_1k": 0.003})
+        costs = MODEL_COSTS.get(
+            canonical_model_id(model_id),
+            {"input_per_1k": 0.001, "output_per_1k": 0.003},
+        )
         return (input_tokens / 1000) * costs["input_per_1k"] + (output_tokens / 1000) * costs["output_per_1k"]
 
-    def _format_request_body(self, request: BedrockRequest) -> Dict[str, Any]:
-        """
-        Format request body for the specific model family.
-
-        FTR: Each model family has a different request schema.
-        This method abstracts the differences.
-        """
-        family = ModelFamily.from_model_id(request.model_id)
-
-        if family == ModelFamily.ANTHROPIC_CLAUDE:
-            body = {
-                "anthropic_version": "bedrock-2023-05-31",
-                "max_tokens": request.max_tokens,
+    def _converse_kwargs(self, request: BedrockRequest) -> Dict[str, Any]:
+        """Build a model-agnostic Converse API request."""
+        kwargs: Dict[str, Any] = {
+            "modelId": request.model_id,
+            "messages": [
+                {"role": "user", "content": [{"text": request.prompt}]},
+            ],
+            "inferenceConfig": {
+                "maxTokens": request.max_tokens,
                 "temperature": request.temperature,
-                "top_p": request.top_p,
-                "messages": [{"role": "user", "content": request.prompt}],
+                "topP": request.top_p,
+            },
+        }
+        if request.stop_sequences:
+            kwargs["inferenceConfig"]["stopSequences"] = request.stop_sequences
+        if request.system_prompt:
+            kwargs["system"] = [{"text": request.system_prompt}]
+        if request.guardrail_id and request.guardrail_version:
+            kwargs["guardrailConfig"] = {
+                "guardrailIdentifier": request.guardrail_id,
+                "guardrailVersion": request.guardrail_version,
             }
-            if request.system_prompt:
-                body["system"] = request.system_prompt
-            if request.stop_sequences:
-                body["stop_sequences"] = request.stop_sequences
+        return kwargs
 
-        elif family == ModelFamily.AMAZON_TITAN:
-            body = {
-                "inputText": request.prompt,
-                "textGenerationConfig": {
-                    "maxTokenCount": request.max_tokens,
-                    "temperature": request.temperature,
-                    "topP": request.top_p,
-                    "stopSequences": request.stop_sequences,
-                },
-            }
-
-        elif family == ModelFamily.META_LLAMA:
-            body = {
-                "prompt": request.prompt,
-                "max_gen_len": request.max_tokens,
-                "temperature": request.temperature,
-                "top_p": request.top_p,
-            }
-
-        else:
-            # Generic fallback
-            body = {
-                "prompt": request.prompt,
-                "max_tokens": request.max_tokens,
-                "temperature": request.temperature,
-            }
-
-        return body
-
-    def _parse_response_body(self, model_id: str, response_body: Dict[str, Any]) -> tuple:
+    @staticmethod
+    def _parse_converse_response(response_body: Dict[str, Any]) -> tuple:
         """
-        Parse response body and extract text, tokens, and stop reason.
+        Parse a Converse API response.
 
         Returns (text, input_tokens, output_tokens, stop_reason).
         """
-        family = ModelFamily.from_model_id(model_id)
-
-        if family == ModelFamily.ANTHROPIC_CLAUDE:
-            text = response_body.get("content", [{}])[0].get("text", "")
-            usage = response_body.get("usage", {})
-            return text, usage.get("input_tokens", 0), usage.get("output_tokens", 0), response_body.get("stop_reason", "end_turn")
-
-        elif family == ModelFamily.AMAZON_TITAN:
-            results = response_body.get("results", [])
-            text = results[0].get("outputText", "") if results else ""
-            return text, response_body.get("inputTokenCount", 0), response_body.get("outputTokenCount", 0), results[0].get("completionReason", "end_turn") if results else "end_turn"
-
-        elif family == ModelFamily.META_LLAMA:
-            text = response_body.get("generation", "")
-            return text, self.estimate_tokens(""), self.estimate_tokens(text), "end_turn"
-
-        else:
-            text = response_body.get("output", response_body.get("generation", ""))
-            return text, self.estimate_tokens(""), self.estimate_tokens(text), "end_turn"
+        content = response_body.get("output", {}).get("message", {}).get("content", [])
+        text = "".join(
+            part.get("text", "")
+            for part in content
+            if isinstance(part, dict)
+        )
+        usage = response_body.get("usage", {})
+        input_tokens = usage.get("inputTokens", 0)
+        output_tokens = usage.get("outputTokens", 0)
+        stop_reason = response_body.get("stopReason", "end_turn")
+        return text, input_tokens, output_tokens, stop_reason
 
     def invoke(self, request: BedrockRequest) -> BedrockResponse:
         """
-        Invoke a Bedrock model with full error handling and metadata.
+        Invoke a Bedrock model through the Converse API.
 
         FTR Compliance:
-        - Explicit model ARN
+        - Explicit model id
         - Timeout enforcement
         - Cost estimation
         - Invocation logging
         """
         start_time = time.monotonic()
+        model_id = request.model_id
 
         try:
-            body = self._format_request_body(request)
+            assert_model_allowed(model_id)
+            raw_response = self.client.converse(**self._converse_kwargs(request))
 
-            invoke_kwargs = {
-                "modelId": request.model_id,
-                "body": json.dumps(body),
-            }
-
-            # FTR: Guardrails integration if configured
-            if request.guardrail_id and request.guardrail_version:
-                invoke_kwargs["guardrailIdentifier"] = request.guardrail_id
-                invoke_kwargs["guardrailVersion"] = request.guardrail_version
-
-            raw_response = self.client.invoke_model(**invoke_kwargs)
-            response_body = json.loads(raw_response["Body"].read().decode("utf-8"))
-
-            response_text, input_tokens, output_tokens, stop_reason = self._parse_response_body(
-                request.model_id, response_body
+            response_text, input_tokens, output_tokens, stop_reason = self._parse_converse_response(
+                raw_response
             )
             latency_ms = (time.monotonic() - start_time) * 1000
-            cost_usd = self.estimate_cost(request.model_id, input_tokens, output_tokens)
+            cost_usd = self.estimate_cost(model_id, input_tokens, output_tokens)
 
             response = BedrockResponse(
                 request_id=request.request_id,
-                model_id=request.model_id,
+                model_id=model_id,
                 response_text=response_text,
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
                 total_tokens=input_tokens + output_tokens,
                 latency_ms=round(latency_ms, 2),
                 cost_usd=round(cost_usd, 6),
-                model_family=ModelFamily.from_model_id(request.model_id),
+                model_family=ModelFamily.from_model_id(model_id),
                 stop_reason=stop_reason,
             )
 
             self._log_invocation(request, response)
             return response
 
+        except UnsupportedModelError:
+            raise
         except Exception as e:
             latency_ms = (time.monotonic() - start_time) * 1000
             response = BedrockResponse(
                 request_id=request.request_id,
-                model_id=request.model_id,
+                model_id=model_id,
                 response_text="",
                 input_tokens=0,
                 output_tokens=0,
                 total_tokens=0,
                 latency_ms=round(latency_ms, 2),
                 cost_usd=0.0,
-                model_family=ModelFamily.from_model_id(request.model_id),
+                model_family=ModelFamily.from_model_id(model_id) if model_id else ModelFamily.UNKNOWN,
                 error=str(e),
                 error_type=type(e).__name__,
             )

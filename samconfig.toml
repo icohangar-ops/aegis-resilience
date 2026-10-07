@@ -6,7 +6,7 @@ s3_prefix = "aegis"
 region = "us-east-1"
 confirm_changeset = false
 capabilities = "CAPABILITY_IAM CAPABILITY_AUTO_EXPAND"
-parameter_overrides = "Environment = \"production\" ChaosSchedule = \"cron(0 */6 * * ? *)\""
+parameter_overrides = "Environment=\"production\" BedrockModelId=\"us.amazon.nova-pro-v1:0\" ChaosSchedule=\"cron(0 */6 * * ? *)\""
 
 [staging.deploy.parameters]
 stack_name = "aegis-staging"
@@ -15,7 +15,7 @@ s3_prefix = "aegis-staging"
 region = "us-east-1"
 confirm_changeset = false
 capabilities = "CAPABILITY_IAM CAPABILITY_AUTO_EXPAND"
-parameter_overrides = "Environment = \"staging\" ChaosSchedule = \"cron(0 0 * * ? *)\""
+parameter_overrides = "Environment=\"staging\" BedrockModelId=\"us.amazon.nova-pro-v1:0\" ChaosSchedule=\"cron(0 0 * * ? *)\""
 
 [development.deploy.parameters]
 stack_name = "aegis-development"
@@ -24,4 +24,4 @@ s3_prefix = "aegis-dev"
 region = "us-east-1"
 confirm_changeset = false
 capabilities = "CAPABILITY_IAM CAPABILITY_AUTO_EXPAND"
-parameter_overrides = "Environment = \"development\" ChaosSchedule = \"cron(0 8 * * ? *)\""
+parameter_overrides = "Environment=\"development\" BedrockModelId=\"us.amazon.nova-pro-v1:0\" ChaosSchedule=\"cron(0 8 * * ? *)\""

@@ -12,7 +12,7 @@ the resilience stack before reaching the LLM:
 Each agent:
 - Accepts a structured request with agent_type, action, and parameters
 - Routes through the 6-layer resilience stack (via Gateway Lambda)
-- Uses Bedrock Claude via the gateway for LLM inference
+- Uses Amazon Nova Pro on Bedrock via the Converse API for LLM inference
 - Maintains ABAC tenant isolation via Cognito claims
 - Tracks invocation metrics in DynamoDB
 
@@ -26,6 +26,7 @@ FTR Compliance Notes:
 
 import json
 import os
+import time
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -43,7 +44,59 @@ BEDROCK_SECRET_ARN = os.environ.get("BEDROCK_SECRET_ARN", "")
 RESILIENCE_EVENTS_QUEUE = os.environ.get("RESILIENCE_EVENTS_QUEUE", "")
 KMS_KEY_ID = os.environ.get("KMS_KEY_ID", "")
 
-PRIMARY_MODEL_ID = os.environ.get("PRIMARY_MODEL_ID", "anthropic.claude-3-5-sonnet-20241022-v1:0")
+DEFAULT_MODEL_ID = "us.amazon.nova-pro-v1:0"
+# On-demand USD per 1K tokens. Nova Pro: $0.80 / 1M input, $3.20 / 1M output.
+NOVA_PRO_INPUT_PER_1K = 0.0008
+NOVA_PRO_OUTPUT_PER_1K = 0.0032
+
+
+class UnsupportedModelError(ValueError):
+    """Raised when a model id is an Anthropic Claude model."""
+
+
+def canonical_model_id(model_id: str) -> str:
+    """Strip a geo inference-profile prefix, leaving the foundation-model id."""
+    raw = (model_id or "").strip()
+    lower = raw.lower()
+    for prefix in ("us.", "eu.", "apac.", "global."):
+        if lower.startswith(prefix):
+            rest = raw[len(prefix):]
+            if rest.lower().startswith(("amazon.", "meta.", "anthropic.", "cohere.", "mistral.", "ai21.")):
+                return rest
+            break
+    return raw
+
+
+def assert_model_allowed(model_id: str) -> str:
+    """Accept a model-id override and reject anthropic.* (including geo profiles)."""
+    if model_id is None or not str(model_id).strip():
+        raise UnsupportedModelError("A model id is required.")
+    raw = str(model_id).strip()
+    normalized = canonical_model_id(raw).lower()
+    if normalized.startswith("anthropic.") or "/anthropic." in normalized:
+        raise UnsupportedModelError(
+            f"Model id '{raw}' is not allowed. Anthropic Claude models (anthropic.*) "
+            "are billed through AWS Marketplace and are not covered by promotional "
+            "credits on this account. Use an Amazon Nova model id such as "
+            f"{DEFAULT_MODEL_ID}."
+        )
+    return raw
+
+
+def model_from_env(name: str, default: str) -> str:
+    return assert_model_allowed(os.environ.get(name, default))
+
+
+PRIMARY_MODEL_ID = model_from_env("PRIMARY_MODEL_ID", DEFAULT_MODEL_ID)
+
+MODEL_COSTS = {
+    "amazon.nova-pro-v1:0": {"input_per_1k": NOVA_PRO_INPUT_PER_1K, "output_per_1k": NOVA_PRO_OUTPUT_PER_1K},
+    "amazon.nova-lite-v1:0": {"input_per_1k": 0.00006, "output_per_1k": 0.00024},
+    "amazon.nova-micro-v1:0": {"input_per_1k": 0.000035, "output_per_1k": 0.00014},
+    "amazon.nova-premier-v1:0": {"input_per_1k": 0.0025, "output_per_1k": 0.0125},
+    "amazon.titan-text-premier-v1:0": {"input_per_1k": 0.0008, "output_per_1k": 0.0016},
+    "meta.llama3-70b-instruct-v1:0": {"input_per_1k": 0.00265, "output_per_1k": 0.0035},
+}
 
 logger = Logger(service="aegis-agents")
 metrics = Metrics(namespace="AegisCFO")
@@ -214,20 +267,27 @@ def validate_tenant_access(tenant_id: str, agent_type: str) -> bool:
 
 
 @resilient(timeout=30.0, max_attempts=3)
-def _invoke_bedrock(body: Dict[str, Any]) -> Dict[str, Any]:
+def _invoke_bedrock(model_id: str, prompt: str, system_prompt: str, max_tokens: int, temperature: float) -> Dict[str, Any]:
     """
-    Raw Bedrock invocation, hardened with timeout + retry/backoff + circuit breaker.
+    Bedrock Converse invocation, hardened with timeout + retry/backoff + circuit breaker.
 
     FTR Compliance: The external LLM call is the failure-prone boundary, so it is
     wrapped with the shared resilience decorator. Raises on failure so retries and
     the circuit breaker engage; callers handle the exhausted case.
     """
+    assert_model_allowed(model_id)
     bedrock = get_bedrock_runtime()
-    response = bedrock.invoke_model(
-        modelId=PRIMARY_MODEL_ID,
-        body=json.dumps(body),
-    )
-    return json.loads(response["Body"].read().decode("utf-8"))
+    converse_kwargs: Dict[str, Any] = {
+        "modelId": model_id,
+        "messages": [{"role": "user", "content": [{"text": prompt}]}],
+        "inferenceConfig": {
+            "maxTokens": max_tokens,
+            "temperature": temperature,
+        },
+    }
+    if system_prompt:
+        converse_kwargs["system"] = [{"text": system_prompt}]
+    return bedrock.converse(**converse_kwargs)
 
 
 @tracer.capture_method
@@ -238,45 +298,46 @@ def invoke_resilience_stack(
     agent_type: str,
     max_tokens: int = 4096,
     temperature: float = 0.7,
+    model_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Invoke the resilience stack for an agent request.
 
     In production, this calls the Gateway Lambda via the internal API.
     For FTR submission, it directly invokes Bedrock with resilience patterns.
+    model_id overrides the Nova Pro default; anthropic.* ids are rejected.
 
     FTR Compliance: All requests go through the resilience stack — no direct LLM access.
     """
     start_time = time.monotonic()
-
-    # Build Bedrock request (Claude 3.5 Sonnet format)
-    body = {
-        "anthropic_version": "bedrock-2023-05-31",
-        "max_tokens": max_tokens,
-        "temperature": temperature,
-        "messages": [{"role": "user", "content": prompt}],
-    }
-    if system_prompt:
-        body["system"] = system_prompt
-
+    selected_model = assert_model_allowed(model_id or PRIMARY_MODEL_ID)
     request_id = str(uuid.uuid4())
 
     try:
-        response_body = _invoke_bedrock(body)
+        response_body = _invoke_bedrock(
+            selected_model, prompt, system_prompt, max_tokens, temperature
+        )
 
-        response_text = response_body.get("content", [{}])[0].get("text", "")
-        input_tokens = response_body.get("usage", {}).get("input_tokens", 0)
-        output_tokens = response_body.get("usage", {}).get("output_tokens", 0)
+        content = response_body.get("output", {}).get("message", {}).get("content", [])
+        response_text = "".join(
+            part.get("text", "") for part in content if isinstance(part, dict)
+        )
+        usage = response_body.get("usage", {})
+        input_tokens = usage.get("inputTokens", 0)
+        output_tokens = usage.get("outputTokens", 0)
         latency_ms = (time.monotonic() - start_time) * 1000
 
-        # Cost estimation
-        cost_usd = (input_tokens / 1000) * 0.003 + (output_tokens / 1000) * 0.015
+        costs = MODEL_COSTS.get(
+            canonical_model_id(selected_model),
+            {"input_per_1k": NOVA_PRO_INPUT_PER_1K, "output_per_1k": NOVA_PRO_OUTPUT_PER_1K},
+        )
+        cost_usd = (input_tokens / 1000) * costs["input_per_1k"] + (output_tokens / 1000) * costs["output_per_1k"]
 
         return {
             "request_id": request_id,
             "status": "success",
             "response": response_text,
-            "model_used": PRIMARY_MODEL_ID,
+            "model_used": selected_model,
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,
             "total_tokens": input_tokens + output_tokens,
@@ -379,6 +440,7 @@ def execute_agent(
     parameters: Dict[str, Any],
     tenant_id: str,
     context_data: str = "",
+    model_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Execute a CFO agent with full resilience stack processing.
@@ -421,6 +483,7 @@ def execute_agent(
         tenant_id=tenant_id,
         agent_type=agent_type,
         max_tokens=agent_def["max_context_tokens"],
+        model_id=model_id,
     )
 
     # Step 5: Record metrics
@@ -472,7 +535,7 @@ def lambda_handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, A
         "parameters": {"period": "Q3_2024", "amount": 1000000},
         "tenant_id": "acme-corp",  // REQUIRED — FTR: ABAC isolation
         "context_data": "...",      // optional supplementary context
-        "model_preference": null    // optional, override default model
+        "model_preference": null    // optional Nova (or other non-Anthropic) model id
     }
 
     Output: Structured response with agent-specific analysis and metrics.
@@ -493,6 +556,9 @@ def lambda_handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, A
         parameters = body.get("parameters", {})
         tenant_id = body.get("tenant_id", "")
         context_data = body.get("context_data", "")
+        model_preference = body.get("model_preference")
+        if model_preference:
+            assert_model_allowed(model_preference)
 
         logger.info(
             f"Agent request: {agent_type}/{action}",
@@ -511,6 +577,7 @@ def lambda_handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, A
             parameters=parameters,
             tenant_id=tenant_id,
             context_data=context_data,
+            model_id=model_preference,
         )
 
         status_code = 200 if result["status"] == "success" else 503
@@ -531,6 +598,12 @@ def lambda_handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, A
         return {
             "statusCode": 403,
             "body": {"error": "Access denied: tenant isolation violation", "details": str(e)},
+        }
+    except UnsupportedModelError as e:
+        logger.error(f"Rejected model id: {e}")
+        return {
+            "statusCode": 400,
+            "body": {"error": str(e), "error_type": "UnsupportedModelError"},
         }
     except AgentInvocationError as e:
         logger.error(f"Agent invocation error: {e}")

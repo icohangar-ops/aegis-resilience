@@ -85,7 +85,7 @@ class CircuitBreaker:
         Initialize circuit breaker.
 
         Args:
-            name: Unique identifier (e.g., "gateway:anthropic.claude-3-5-sonnet")
+            name: Unique identifier (e.g., "gateway:us.amazon.nova-pro-v1:0")
             failure_threshold: Failures before opening circuit (default from env)
             reset_timeout_seconds: Seconds before OPEN → HALF_OPEN (default from env)
             table_name: DynamoDB table name (default from env)
