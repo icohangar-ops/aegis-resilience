@@ -34,7 +34,47 @@ MODEL_ARTIFACTS_BUCKET = os.environ.get("MODEL_ARTIFACTS_BUCKET", "")
 FINE_TUNING_TABLE = os.environ.get("FINE_TUNING_TABLE", "")
 BEDROCK_SECRET_ARN = os.environ.get("BEDROCK_SECRET_ARN", "")
 KMS_KEY_ID = os.environ.get("KMS_KEY_ID", "")
-PRIMARY_MODEL_ID = os.environ.get("PRIMARY_MODEL_ID", "anthropic.claude-3-5-sonnet-20241022-v1:0")
+DEFAULT_MODEL_ID = "us.amazon.nova-pro-v1:0"
+
+
+class UnsupportedModelError(ValueError):
+    """Raised when a model id is an Anthropic Claude model."""
+
+
+def canonical_model_id(model_id: str) -> str:
+    """Strip a geo inference-profile prefix, leaving the foundation-model id."""
+    raw = (model_id or "").strip()
+    lower = raw.lower()
+    for prefix in ("us.", "eu.", "apac.", "global."):
+        if lower.startswith(prefix):
+            rest = raw[len(prefix):]
+            if rest.lower().startswith(("amazon.", "meta.", "anthropic.", "cohere.", "mistral.", "ai21.")):
+                return rest
+            break
+    return raw
+
+
+def assert_model_allowed(model_id: str) -> str:
+    """Accept a model-id override and reject anthropic.* (including geo profiles)."""
+    if model_id is None or not str(model_id).strip():
+        raise UnsupportedModelError("A model id is required.")
+    raw = str(model_id).strip()
+    normalized = canonical_model_id(raw).lower()
+    if normalized.startswith("anthropic.") or "/anthropic." in normalized:
+        raise UnsupportedModelError(
+            f"Model id '{raw}' is not allowed. Anthropic Claude models (anthropic.*) "
+            "are billed through AWS Marketplace and are not covered by promotional "
+            "credits on this account. Use an Amazon Nova model id such as "
+            f"{DEFAULT_MODEL_ID}."
+        )
+    return raw
+
+
+def model_from_env(name: str, default: str) -> str:
+    return assert_model_allowed(os.environ.get(name, default))
+
+
+PRIMARY_MODEL_ID = model_from_env("PRIMARY_MODEL_ID", DEFAULT_MODEL_ID)
 
 logger = Logger(service="aegis-finetune")
 metrics = Metrics(namespace="AegisCFO")
@@ -125,7 +165,7 @@ def create_job_record(job_id: str, strategy: str, tenant_id: str = "default") ->
         "status": JobStatus.PENDING.value,
         "strategy": strategy,
         "tenant_id": tenant_id,
-        "base_model": PRIMARY_MODEL_ID,
+        "base_model": canonical_model_id(PRIMARY_MODEL_ID),
         "progress_percentage": 0,
         "training_samples": 0,
         "validation_samples": 0,
@@ -303,10 +343,14 @@ def format_bedrock_training_config(job_id: str, training_data: Dict[str, Any]) -
     - Role ARN with least-privilege access
     """
     bedrock_config = get_bedrock_config()
+    # Customization APIs take the foundation-model id, not the geo inference profile.
+    base_model = canonical_model_id(
+        assert_model_allowed(bedrock_config.get("primary_model", PRIMARY_MODEL_ID))
+    )
 
     return {
         "jobName": f"aegis-{job_id}",
-        "baseModelIdentifier": bedrock_config.get("primary_model", PRIMARY_MODEL_ID),
+        "baseModelIdentifier": base_model,
         "customModelName": f"aegis-finetuned-{job_id[:8]}",
         "customModelTags": [
             {"key": "Project", "value": "AegisCFO"},

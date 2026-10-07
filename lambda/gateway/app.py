@@ -11,7 +11,8 @@ Architecture:
                                                           → Bedrock (Tertiary)
 
 FTR Compliance Notes:
-- Bedrock invocations use explicit model ARNs (no wildcards in IAM)
+- Bedrock invocations use the Converse API (model-agnostic request shape)
+- IAM allows Amazon Nova foundation models and the us.amazon.nova-* inference profile
 - Circuit breaker state persisted in DynamoDB (multi-invocation consistency)
 - All metrics emitted to CloudWatch custom namespace
 - X-Ray tracing for end-to-end request visibility
@@ -40,17 +41,60 @@ CACHE_BUCKET = os.environ.get("CACHE_BUCKET", "")
 BEDROCK_SECRET_ARN = os.environ.get("BEDROCK_SECRET_ARN", "")
 KMS_KEY_ID = os.environ.get("KMS_KEY_ID", "")
 
-PRIMARY_MODEL_ID = os.environ.get("PRIMARY_MODEL_ID", "anthropic.claude-3-5-sonnet-20241022-v1:0")
-FALLBACK_MODEL_ID = os.environ.get("FALLBACK_MODEL_ID", "amazon.titan-text-premier-v1:0")
-TERTIARY_MODEL_ID = os.environ.get("TERTIARY_MODEL_ID", "meta.llama3-70b-instruct-v1:0")
+DEFAULT_MODEL_ID = "us.amazon.nova-pro-v1:0"
+
+
+class UnsupportedModelError(ValueError):
+    """Raised when a model id is an Anthropic Claude model."""
+
+
+def canonical_model_id(model_id: str) -> str:
+    """Strip a geo inference-profile prefix, leaving the foundation-model id."""
+    raw = (model_id or "").strip()
+    lower = raw.lower()
+    for prefix in ("us.", "eu.", "apac.", "global."):
+        if lower.startswith(prefix):
+            rest = raw[len(prefix):]
+            if rest.lower().startswith(("amazon.", "meta.", "anthropic.", "cohere.", "mistral.", "ai21.")):
+                return rest
+            break
+    return raw
+
+
+def assert_model_allowed(model_id: str) -> str:
+    """Accept a model-id override and reject anthropic.* (including geo profiles)."""
+    if model_id is None or not str(model_id).strip():
+        raise UnsupportedModelError("A model id is required.")
+    raw = str(model_id).strip()
+    normalized = canonical_model_id(raw).lower()
+    if normalized.startswith("anthropic.") or "/anthropic." in normalized:
+        raise UnsupportedModelError(
+            f"Model id '{raw}' is not allowed. Anthropic Claude models (anthropic.*) "
+            "are billed through AWS Marketplace and are not covered by promotional "
+            "credits on this account. Use an Amazon Nova model id such as "
+            f"{DEFAULT_MODEL_ID}."
+        )
+    return raw
+
+
+def model_from_env(name: str, default: str) -> str:
+    return assert_model_allowed(os.environ.get(name, default))
+
+
+PRIMARY_MODEL_ID = model_from_env("PRIMARY_MODEL_ID", DEFAULT_MODEL_ID)
+FALLBACK_MODEL_ID = model_from_env("FALLBACK_MODEL_ID", "amazon.titan-text-premier-v1:0")
+TERTIARY_MODEL_ID = model_from_env("TERTIARY_MODEL_ID", "meta.llama3-70b-instruct-v1:0")
 
 CIRCUIT_BREAKER_THRESHOLD = int(os.environ.get("CIRCUIT_BREAKER_THRESHOLD", "5"))
 CIRCUIT_BREAKER_RESET_TIMEOUT = int(os.environ.get("CIRCUIT_BREAKER_RESET_TIMEOUT", "60"))
 
-# Cost estimation per 1K tokens (USD) — approximate for budget tracking
-# FTR Note: Costs updated quarterly based on AWS pricing
+# On-demand USD per 1K tokens (us-east-1). Nova Pro is $0.80 / $3.20 per 1M.
+# Inference-profile ids resolve through canonical_model_id.
 MODEL_COSTS = {
-    "anthropic.claude-3-5-sonnet-20241022-v1:0": {"input_per_1k": 0.003, "output_per_1k": 0.015},
+    "amazon.nova-pro-v1:0": {"input_per_1k": 0.0008, "output_per_1k": 0.0032},
+    "amazon.nova-lite-v1:0": {"input_per_1k": 0.00006, "output_per_1k": 0.00024},
+    "amazon.nova-micro-v1:0": {"input_per_1k": 0.000035, "output_per_1k": 0.00014},
+    "amazon.nova-premier-v1:0": {"input_per_1k": 0.0025, "output_per_1k": 0.0125},
     "amazon.titan-text-premier-v1:0": {"input_per_1k": 0.0008, "output_per_1k": 0.0016},
     "meta.llama3-70b-instruct-v1:0": {"input_per_1k": 0.00265, "output_per_1k": 0.0035},
 }
@@ -273,66 +317,36 @@ def invoke_bedrock_model(model_id: str, prompt: str, system_prompt: str = "", ma
     }
 
     try:
-        # Build request body based on model family
-        if "claude" in model_id.lower() or "anthropic" in model_id.lower():
-            body = {
-                "anthropic_version": "bedrock-2023-05-31",
-                "max_tokens": max_tokens,
+        assert_model_allowed(model_id)
+        # Converse is model-agnostic: Nova, Titan, and Llama share this shape.
+        converse_kwargs: Dict[str, Any] = {
+            "modelId": model_id,
+            "messages": [{"role": "user", "content": [{"text": prompt}]}],
+            "inferenceConfig": {
+                "maxTokens": max_tokens,
                 "temperature": temperature,
-                "messages": [{"role": "user", "content": prompt}],
-            }
-            if system_prompt:
-                body["system"] = system_prompt
+                "topP": 0.9,
+            },
+        }
+        if system_prompt:
+            converse_kwargs["system"] = [{"text": system_prompt}]
 
-        elif "titan" in model_id.lower() or "amazon" in model_id.lower():
-            body = {
-                "inputText": prompt,
-                "textGenerationConfig": {
-                    "maxTokenCount": max_tokens,
-                    "temperature": temperature,
-                    "topP": 0.9,
-                },
-            }
-
-        elif "llama" in model_id.lower() or "meta" in model_id.lower():
-            body = {
-                "prompt": prompt,
-                "max_gen_len": max_tokens,
-                "temperature": temperature,
-                "top_p": 0.9,
-            }
-        else:
-            # Generic Bedrock invocation
-            body = {
-                "prompt": prompt,
-                "max_tokens": max_tokens,
-                "temperature": temperature,
-            }
-
-        response = bedrock.invoke_model(
-            modelId=model_id,
-            body=json.dumps(body),
+        response = bedrock.converse(**converse_kwargs)
+        content = response.get("output", {}).get("message", {}).get("content", [])
+        response_text = "".join(
+            part.get("text", "") for part in content if isinstance(part, dict)
         )
-
-        response_body = json.loads(response["Body"].read().decode("utf-8"))
-
-        # Extract response text based on model family
-        if "claude" in model_id.lower() or "anthropic" in model_id.lower():
-            response_text = response_body.get("content", [{}])[0].get("text", "")
-            metadata["input_tokens"] = response_body.get("usage", {}).get("input_tokens", 0)
-            metadata["output_tokens"] = response_body.get("usage", {}).get("output_tokens", 0)
-        elif "completion" in response_body:
-            response_text = response_body["results"][0]["outputText"] if response_body.get("results") else ""
-            metadata["input_tokens"] = response_body.get("inputTokenCount", 0)
-            metadata["output_tokens"] = response_body.get("outputTokenCount", 0)
-        else:
-            response_text = response_body.get("generation", response_body.get("output", ""))
+        usage = response.get("usage", {})
+        metadata["input_tokens"] = usage.get("inputTokens", 0)
+        metadata["output_tokens"] = usage.get("outputTokens", 0)
 
         latency_ms = (time.monotonic() - start_time) * 1000
         metadata["latency_ms"] = round(latency_ms, 2)
 
-        # Cost estimation
-        costs = MODEL_COSTS.get(model_id, {"input_per_1k": 0.001, "output_per_1k": 0.003})
+        costs = MODEL_COSTS.get(
+            canonical_model_id(model_id),
+            {"input_per_1k": 0.001, "output_per_1k": 0.003},
+        )
         metadata["cost_usd"] = (
             (metadata["input_tokens"] / 1000) * costs["input_per_1k"]
             + (metadata["output_tokens"] / 1000) * costs["output_per_1k"]
@@ -343,6 +357,8 @@ def invoke_bedrock_model(model_id: str, prompt: str, system_prompt: str = "", ma
 
         return response_text, metadata
 
+    except UnsupportedModelError:
+        raise
     except Exception as e:
         latency_ms = (time.monotonic() - start_time) * 1000
         metadata["latency_ms"] = round(latency_ms, 2)
@@ -386,10 +402,12 @@ def route_request(
     request_id = str(uuid.uuid4())
     start_time = time.monotonic()
 
-    # Build model chain (respect preference if specified)
+    # Build model chain. A non-Anthropic model_preference overrides the primary.
     chain = MODEL_CHAIN.copy()
-    if model_preference and model_preference in chain:
-        chain.remove(model_preference)
+    if model_preference:
+        model_preference = assert_model_allowed(model_preference)
+        if model_preference in chain:
+            chain.remove(model_preference)
         chain.insert(0, model_preference)
 
     attempts = []
@@ -587,6 +605,9 @@ def lambda_handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, A
     except json.JSONDecodeError as e:
         logger.error(f"Invalid JSON in request body: {e}")
         return {"statusCode": 400, "body": {"error": "Invalid JSON"}}
+    except UnsupportedModelError as e:
+        logger.error(f"Rejected model id: {e}")
+        return {"statusCode": 400, "body": {"error": str(e), "error_type": "UnsupportedModelError"}}
     except Exception as e:
         logger.error(f"Gateway unhandled error: {e}", exc_info=True)
         metrics.add_metric(name="GatewayUnhandledErrors", unit=MetricUnit.Count, value=1)

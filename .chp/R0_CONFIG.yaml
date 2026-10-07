@@ -76,7 +76,9 @@ resilience:
 
 # Bedrock Configuration
 bedrock:
-  primary_model: "anthic.claude-3-5-sonnet-20241022-v1:0"
+  primary_model: "us.amazon.nova-pro-v1:0"
+  region: "us-east-1"
+  api: "converse"
   fallback_model: "amazon.titan-text-premier-v1:0"
   tertiary_model: "meta.llama3-70b-instruct-v1:0"
   max_tokens: 4096

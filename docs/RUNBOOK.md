@@ -45,6 +45,7 @@ sam deploy \
   --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND \
   --parameter-overrides \
     Environment=production \
+    BedrockModelId=us.amazon.nova-pro-v1:0 \
     ChaosSchedule="cron(0 */6 * * ? *)"
 
 # Verify deployment
@@ -55,12 +56,25 @@ sam deploy \
 
 | Parameter | Production | Staging | Development |
 |-----------|-----------|---------|-------------|
+| BedrockModelId | us.amazon.nova-pro-v1:0 | us.amazon.nova-pro-v1:0 | us.amazon.nova-pro-v1:0 |
 | Chaos Schedule | Every 6 hours | Daily | Daily at 8am |
 | Provisioned Concurrency | 5 | 2 | 0 |
 | Log Retention | 30 days | 14 days | 7 days |
 | KMS Key Rotation | Enabled | Enabled | Enabled |
 
-### 1.3 Post-Deployment Verification
+### 1.3 Switching the LLM to Amazon Nova Pro
+
+The default model is Amazon Nova Pro (`us.amazon.nova-pro-v1:0`) in us-east-1, called through the Bedrock Converse API. CloudFormation keeps a stack's previous parameter values on update, so an existing stack still running the old model id will not pick up the new template default unless `BedrockModelId` is passed explicitly (`samconfig.toml` does this).
+
+Redeploy the stack after this change so all of the following update together:
+
+- Lambda `PRIMARY_MODEL_ID` (gateway, resilience stack, agents, fine-tune)
+- Secrets Manager `aegis/bedrock-config-<env>` (primary model, Converse API marker)
+- IAM: `foundation-model/amazon.nova-*` in us-east-1, us-east-2, and us-west-2, plus `inference-profile/us.amazon.nova-*`
+
+Confirm Nova Pro model access is enabled for the account in the Bedrock console (us-east-1). `anthropic.*` model ids are rejected at deploy time (template `AllowedPattern`) and at runtime.
+
+### 1.4 Post-Deployment Verification
 
 ```bash
 # Check stack status
@@ -119,7 +133,7 @@ aws lambda invoke \
 # Check circuit breaker state
 aws dynamodb get-item \
   --table-name aegis-circuit-breakers-production \
-  --key '{"breaker_id": {"S": "gateway:anthic.claude-3-5-sonnet-20241022-v1:0"}}'
+  --key '{"breaker_id": {"S": "gateway:us.amazon.nova-pro-v1:0"}}'
 ```
 
 ### 2.3 Chaos Test Execution

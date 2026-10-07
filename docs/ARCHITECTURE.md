@@ -46,7 +46,7 @@ and partial service degradation.
 │  ║ All requests  ║ • Network║ 2.Circuit ║ Model    ║   Versioning ║         ║  │
 │  ║ → Resilience ║   Part.  ║   Breaker ║ Fallback ║              ║         ║  │
 │  ║   Stack       ║ • CB     ║ 3.Model   ║ Chain:   ║              ║         ║  │
-│  ║               ║   Cascade║   Fallback ║ Claude → ║              ║         ║  │
+│  ║               ║   Cascade║   Fallback ║ Nova →   ║              ║         ║  │
 │  ║               ║ • Cache  ║ 4.Semantc ║ Titan →  ║              ║         ║  │
 │  ║               ║   Inval. ║   Cache   ║ LLaMA    ║              ║         ║  │
 │  ║               ║ • Degrad ║ 5.Graceful║          ║              ║         ║  │
@@ -62,8 +62,8 @@ and partial service degradation.
 │  ║  │AWS Bedrock   │  │Amazon S3    │  │Amazon        │  │Amazon     │ ║ │
 │  ║  │Runtime       │  │             │  │DynamoDB      │  │SQS        │ ║ │
 │  ║  │             │  │• curated-   │  │              │  │           │ ║ │
-│  ║  │• Claude 3.5 │  │  data       │  │• resilience  │  │• resilience║ ║ │
-│  ║  │  Sonnet     │  │• model-     │  │  _metrics    │  │  -events  │ ║ │
+│  ║  │• Nova Pro   │  │  data       │  │• resilience  │  │• resilience║ ║ │
+│  ║  │  (Converse) │  │• model-     │  │  _metrics    │  │  -events  │ ║ │
 │  ║  │• Titan      │  │  artifacts  │  │• circuit     │  │• chaos    │ ║ │
 │  ║  │• LLaMA 3    │  │• resilience │  │  _breakers   │  │  -tasks   │ ║ │
 │  ║  │             │  │  _logs      │  │• chaos       │  │           │ ║ │
@@ -135,7 +135,7 @@ Client
   │    ├─ Layer 5: Apply Graceful Degradation
   │    │
   │    ├─ Layer 3: Model Fallback Chain
-  │    │    ├── Claude 3.5 Sonnet (Primary)
+  │    │    ├── Amazon Nova Pro us.amazon.nova-pro-v1:0 (Primary, Converse API)
   │    │    │    └── Layer 2: Circuit Breaker check
   │    │    │         └── Layer 1: Retry with backoff
   │    │    ├── Titan (Fallback) — if primary fails
@@ -146,7 +146,7 @@ Client
   │    └─ Layer 6: Verify timeout not exceeded
   │
   │    ▼
-  │  AWS Bedrock Runtime (Claude/Titan/LLaMA invocation)
+  │  AWS Bedrock Runtime Converse API (Nova Pro / Titan / LLaMA)
   │
   ▼
 Response (JSON with analysis + metrics)

@@ -87,7 +87,7 @@ against all 6 pillars of the AWS Well-Architected Framework.
 
 1. **Retry (Layer 1)**: Exponential backoff with jitter, 3 attempts, classified retryable errors
 2. **Circuit Breaker (Layer 2)**: DynamoDB-persisted state, OPEN/HALF_OPEN/CLOSED transitions
-3. **Model Fallback (Layer 3)**: Claude → Titan → LLaMA with independent circuit breakers
+3. **Model Fallback (Layer 3)**: Nova Pro → Titan → LLaMA with independent circuit breakers
 4. **Semantic Cache (Layer 4)**: S3-backed, TTL-based, content-addressable keys
 5. **Graceful Degradation (Layer 5)**: L0→L3 progressive context reduction
 6. **Hard Timeout (Layer 6)**: 30-second absolute deadline enforcement
@@ -129,7 +129,7 @@ against all 6 pillars of the AWS Well-Architected Framework.
 - **Semantic Cache**: Avoids redundant Bedrock invocations (up to 80% cache hit for repeated queries)
 - **Provisioned Concurrency**: 5 units for gateway Lambda (eliminates cold starts)
 - **VPC Endpoints**: S3 and DynamoDB traffic stays within AWS network
-- **Model Selection**: Primary (Claude) for quality, fallback (Titan/LLaMA) for cost/performance balance
+- **Model Selection**: Primary (Amazon Nova Pro, credit-eligible on Bedrock) for quality, fallback (Titan/LLaMA) for cost/performance balance
 - **Timeout Configuration**: Per-layer timeouts prevent resource waste on hung requests
 
 **Improvement Plan:**

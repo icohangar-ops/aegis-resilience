@@ -43,9 +43,49 @@ CACHE_BUCKET = os.environ.get("CACHE_BUCKET", "")
 BEDROCK_SECRET_ARN = os.environ.get("BEDROCK_SECRET_ARN", "")
 KMS_KEY_ID = os.environ.get("KMS_KEY_ID", "")
 
-PRIMARY_MODEL_ID = os.environ.get("PRIMARY_MODEL_ID", "anthropic.claude-3-5-sonnet-20241022-v1:0")
-FALLBACK_MODEL_ID = os.environ.get("FALLBACK_MODEL_ID", "amazon.titan-text-premier-v1:0")
-TERTIARY_MODEL_ID = os.environ.get("TERTIARY_MODEL_ID", "meta.llama3-70b-instruct-v1:0")
+DEFAULT_MODEL_ID = "us.amazon.nova-pro-v1:0"
+
+
+class UnsupportedModelError(ValueError):
+    """Raised when a model id is an Anthropic Claude model."""
+
+
+def canonical_model_id(model_id: str) -> str:
+    """Strip a geo inference-profile prefix, leaving the foundation-model id."""
+    raw = (model_id or "").strip()
+    lower = raw.lower()
+    for prefix in ("us.", "eu.", "apac.", "global."):
+        if lower.startswith(prefix):
+            rest = raw[len(prefix):]
+            if rest.lower().startswith(("amazon.", "meta.", "anthropic.", "cohere.", "mistral.", "ai21.")):
+                return rest
+            break
+    return raw
+
+
+def assert_model_allowed(model_id: str) -> str:
+    """Accept a model-id override and reject anthropic.* (including geo profiles)."""
+    if model_id is None or not str(model_id).strip():
+        raise UnsupportedModelError("A model id is required.")
+    raw = str(model_id).strip()
+    normalized = canonical_model_id(raw).lower()
+    if normalized.startswith("anthropic.") or "/anthropic." in normalized:
+        raise UnsupportedModelError(
+            f"Model id '{raw}' is not allowed. Anthropic Claude models (anthropic.*) "
+            "are billed through AWS Marketplace and are not covered by promotional "
+            "credits on this account. Use an Amazon Nova model id such as "
+            f"{DEFAULT_MODEL_ID}."
+        )
+    return raw
+
+
+def model_from_env(name: str, default: str) -> str:
+    return assert_model_allowed(os.environ.get(name, default))
+
+
+PRIMARY_MODEL_ID = model_from_env("PRIMARY_MODEL_ID", DEFAULT_MODEL_ID)
+FALLBACK_MODEL_ID = model_from_env("FALLBACK_MODEL_ID", "amazon.titan-text-premier-v1:0")
+TERTIARY_MODEL_ID = model_from_env("TERTIARY_MODEL_ID", "meta.llama3-70b-instruct-v1:0")
 
 RETRY_MAX_ATTEMPTS = int(os.environ.get("RETRY_MAX_ATTEMPTS", "3"))
 CIRCUIT_BREAKER_THRESHOLD = int(os.environ.get("CIRCUIT_BREAKER_THRESHOLD", "5"))
@@ -332,18 +372,31 @@ class ModelFallbackChain:
         system_prompt: str = "",
         max_tokens: int = 4096,
         temperature: float = 0.7,
+        model_preference: Optional[str] = None,
     ) -> Tuple[Optional[str], Dict[str, Any]]:
         """
         Invoke models in fallback chain until one succeeds.
 
+        A non-Anthropic model_preference is tried first. anthropic.* ids raise
+        UnsupportedModelError.
+
         Returns (response_text, metadata) where metadata includes
         all attempt details for observability.
         """
+        chain = list(self.chain)
+        if model_preference:
+            model_preference = assert_model_allowed(model_preference)
+            if model_preference in chain:
+                chain.remove(model_preference)
+            chain.insert(0, model_preference)
+            if model_preference not in self.breakers:
+                self.breakers[model_preference] = CircuitBreaker(f"resilience:{model_preference}")
+
         attempts = []
         best_response = None
         best_metadata = None
 
-        for model_id in self.chain:
+        for model_id in chain:
             breaker = self.breakers[model_id]
 
             if not breaker.allow_request():
@@ -378,33 +431,23 @@ class ModelFallbackChain:
 
     @with_retry(max_attempts=2)
     def _invoke_single(self, model_id: str, prompt: str, system_prompt: str, max_tokens: int, temperature: float) -> str:
-        """Invoke a single Bedrock model (wrapped in retry decorator)."""
+        """Invoke a single Bedrock model via the Converse API (wrapped in retry)."""
+        assert_model_allowed(model_id)
         bedrock = get_bedrock_runtime()
-
-        if "claude" in model_id.lower() or "anthropic" in model_id.lower():
-            body = {
-                "anthropic_version": "bedrock-2023-05-31",
-                "max_tokens": max_tokens,
+        converse_kwargs: Dict[str, Any] = {
+            "modelId": model_id,
+            "messages": [{"role": "user", "content": [{"text": prompt}]}],
+            "inferenceConfig": {
+                "maxTokens": max_tokens,
                 "temperature": temperature,
-                "messages": [{"role": "user", "content": prompt}],
-            }
-            if system_prompt:
-                body["system"] = system_prompt
-        elif "titan" in model_id.lower():
-            body = {"inputText": prompt, "textGenerationConfig": {"maxTokenCount": max_tokens, "temperature": temperature}}
-        elif "llama" in model_id.lower():
-            body = {"prompt": prompt, "max_gen_len": max_tokens, "temperature": temperature}
-        else:
-            body = {"prompt": prompt, "max_tokens": max_tokens, "temperature": temperature}
+            },
+        }
+        if system_prompt:
+            converse_kwargs["system"] = [{"text": system_prompt}]
 
-        response = bedrock.invoke_model(modelId=model_id, body=json.dumps(body))
-        response_body = json.loads(response["Body"].read().decode("utf-8"))
-
-        if "claude" in model_id.lower():
-            return response_body.get("content", [{}])[0].get("text", "")
-        elif "results" in response_body:
-            return response_body["results"][0].get("outputText", "")
-        return response_body.get("generation", response_body.get("output", ""))
+        response = bedrock.converse(**converse_kwargs)
+        content = response.get("output", {}).get("message", {}).get("content", [])
+        return "".join(part.get("text", "") for part in content if isinstance(part, dict))
 
 
 # =========================================================================
@@ -625,6 +668,9 @@ class ResilienceStack:
 
         Returns comprehensive result with layer-by-layer metadata.
         """
+        if model_preference:
+            assert_model_allowed(model_preference)
+
         request_id = str(uuid.uuid4())
         stack_start = time.monotonic()
         timeout = TimeoutEnforcer()
@@ -675,6 +721,7 @@ class ResilienceStack:
                     system_prompt=degraded_system,
                     max_tokens=degraded_tokens,
                     temperature=temperature,
+                    model_preference=model_preference,
                 )
 
                 if response is not None:
@@ -784,6 +831,9 @@ def lambda_handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, A
             "body": result,
         }
 
+    except UnsupportedModelError as e:
+        logger.error(f"Rejected model id: {e}")
+        return {"statusCode": 400, "body": {"error": str(e), "error_type": "UnsupportedModelError"}}
     except Exception as e:
         logger.error(f"Resilience stack unhandled error: {e}", exc_info=True)
         metrics.add_metric(name="ResilienceStackError", unit=MetricUnit.Count, value=1)
